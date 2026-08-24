@@ -1,0 +1,6 @@
+riscv-tests/
+*.o
+*.bin
+*.elf
+*.vvp
+*.vcd
