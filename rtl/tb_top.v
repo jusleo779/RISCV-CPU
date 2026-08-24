@@ -12,7 +12,7 @@ module tb_top;
         $dumpfile("cpu_top.vcd");
         $dumpvars(0, tb_top);
         #10 reset = 0;
-        #190;                    // let the program run
+        #250;                    // let the program run
 
         //x1
         if (dut.m1.registers[1] !== 32'd12) begin
@@ -116,11 +116,13 @@ module tb_top;
         end
 
         //x18
-        if (dut.m1.registers[18] !== 32'd10) begins
+        if (dut.m1.registers[18] !== 32'd10) begin
             $display("FAIL: x18 = %0d, expected 10", dut.m1.registers[18]);
             errors = errors + 1;
         end
 
+        if (dut.pc !== 32'd76) $display("FAIL: program did not complete, pc=%0d", dut.pc);
+        
         if (errors == 0) $display("ALL TESTS PASSED");
         else             $display("%0d FAILURES", errors);
         $finish;

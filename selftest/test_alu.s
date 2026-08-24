@@ -1,4 +1,3 @@
-cat > test_alu.s << 'EOF'
 .global _start
 _start:
     addi x1, x0, 12
@@ -21,4 +20,3 @@ _start:
     sub  x18, x16, x14
 loop:
     j loop
-EOF
