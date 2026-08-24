@@ -1,0 +1,37 @@
+#! /usr/local/bin/vvp
+:ivl_version "13.0 (devel)" "(s20251012-46-gaad14df3d)";
+:ivl_delay_selection "TYPICAL";
+:vpi_time_precision + 0;
+:vpi_module "/usr/local/lib/ivl/system.vpi";
+:vpi_module "/usr/local/lib/ivl/vhdl_sys.vpi";
+:vpi_module "/usr/local/lib/ivl/vhdl_textio.vpi";
+:vpi_module "/usr/local/lib/ivl/v2005_math.vpi";
+:vpi_module "/usr/local/lib/ivl/va_math.vpi";
+S_0x5eaf068bc770 .scope module, "imem_test" "imem_test" 2 1;
+ .timescale 0 0;
+v0x5eaf068bc900_0 .var/i "i", 31 0;
+v0x5eaf06903c10 .array "imem", 15 0, 31 0;
+    .scope S_0x5eaf068bc770;
+T_0 ;
+    %vpi_call 2 5 "$readmemh", "t_clean.hex", v0x5eaf06903c10 {0 0 0};
+    %pushi/vec4 0, 0, 32;
+    %store/vec4 v0x5eaf068bc900_0, 0, 32;
+T_0.0 ; Top of for-loop
+    %load/vec4 v0x5eaf068bc900_0;
+    %cmpi/s 4, 0, 32;
+	  %jmp/0xz T_0.1, 5;
+    %vpi_call 2 7 "$display", "imem[%0d] = %h", v0x5eaf068bc900_0, &A<v0x5eaf06903c10, v0x5eaf068bc900_0 > {0 0 0};
+T_0.2 ; for-loop step statement
+    %load/vec4 v0x5eaf068bc900_0;
+    %addi 1, 0, 32;
+    %store/vec4 v0x5eaf068bc900_0, 0, 32;
+    %jmp T_0.0;
+T_0.1 ; for-loop exit label
+    %vpi_call 2 8 "$finish" {0 0 0};
+    %end;
+    .thread T_0;
+# The file index is used to find the file name in the following table.
+:file_names 3;
+    "N/A";
+    "<interactive>";
+    "imem_test.v";
