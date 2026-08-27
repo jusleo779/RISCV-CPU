@@ -18,5 +18,26 @@ _start:
     add  x16, x14, x15
     addi x17, x0, -1
     sub  x18, x16, x14
+
+    #jal test
+    addi x20, x0, 5      
+    jal  x19, done
+    addi x20, x0, 99   
+    done:
+    addi x21, x0, 7
+    
+    #JALR test
+    jal  x22, subroutine     # x22 = address of the next instruction
+    addi x23, x0, 7          # ← JALR should land here
+    j    loop
+
+subroutine:
+    addi x24, x0, 42
+    jalr x0, 1(x22)          # return: jump to x22 + 0
+    addi x24, x0, 99         # should NOT run
+
+
+    
 loop:
     j loop
+

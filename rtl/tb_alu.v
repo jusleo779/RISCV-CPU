@@ -1,19 +1,30 @@
-module tb_top;
+`default_nettype none
+module tb_alu;
     reg clk = 0;
     reg reset = 1;
 
-    cpu_top dut(.clk(clk), .reset(reset));
+    cpu_top #(.test_file("test_alu.hex")) dut(.clk(clk), .reset(reset));
 
     always #5 clk = ~clk;
 
     integer errors = 0;
 
+    //if the assertions are never met this will end the wait statement
+    initial begin
+        #10000;
+        $display("TIMEOUT");
+        $finish;
+    end
+
     initial begin
         $dumpfile("cpu_top.vcd");
-        $dumpvars(0, tb_top);
+        $dumpvars(0, tb_alu);
         #10 reset = 0;
-        #250;                    // let the program run
 
+        wait (dut.opcode == 7'b1101111 && dut.imm_j == 0);
+        #1; // let the last write settle
+
+        //assertions
         //x1
         if (dut.m1.registers[1] !== 32'd12) begin
             $display("FAIL: x1 = %0d, expected 12", dut.m1.registers[1]);
@@ -121,12 +132,52 @@ module tb_top;
             errors = errors + 1;
         end
 
-        if (dut.pc !== 32'd76) $display("FAIL: program did not complete, pc=%0d", dut.pc);
+        //x19 
+        if (dut.m1.registers[19] !== 32'h50)begin
+            $display("FAIL: x19 = %h, expected 0x50", dut.m1.registers[19]);
+            errors = errors + 1;
+        end
+
+         //x20
+        if (dut.m1.registers[20] !== 32'd5)begin
+            $display("FAIL: x20 = %0d, expected 5", dut.m1.registers[20]);
+            errors = errors + 1;
+        end
+
+        //x21
+        if (dut.m1.registers[21] !== 32'd7)begin
+            $display("FAIL: x21 = %0d, expected 7", dut.m1.registers[21]);
+            errors = errors + 1;
+        end
+
+        if (dut.m1.registers[22] !== 32'd92) begin
+            // JAL link address
+            $display("FAIL: x22 = %0d, expected 92", dut.m1.registers[22]);
+            errors = errors + 1;
+        end
+        if (dut.m1.registers[23] !== 32'd7)begin
+            $display("FAIL: x23 = %0d, expected 7", dut.m1.registers[23]);
+            errors = errors + 1;
+        end
+
+        if (dut.m1.registers[24] !== 32'd42)begin 
+            $display("FAIL: x24 = %0d, expected 42", dut.m1.registers[24]);
+            errors = errors + 1;
+        end
+        
+        
+        //j loop
+        if (dut.pc !== 32'h70)begin
+             $display("FAIL:pc=%h, expected 0x70", dut.pc);
+             errors = errors + 1;
+        end
         
         if (errors == 0) $display("ALL TESTS PASSED");
         else             $display("%0d FAILURES", errors);
+
         $finish;
     end
    
     
 endmodule
+`default_nettype wire

@@ -1,4 +1,5 @@
-module alu(
+`default_nettype none
+module alu( //computations and operations for anything
     input[31:0] a,
     input[31:0] b,
     input [3:0] alu_op, 
@@ -14,10 +15,11 @@ parameter SRL_SRA = 3'b101; //depends onf func7[5] value
 parameter OR = 3'b110;
 parameter AND = 3'b111;
 
+//Operations Decoder
 always@(*)begin
     case(alu_op[2:0])
     ADD_SUB: begin 
-        if(alu_op[3])
+        if(alu_op[3]) //based on the func7[5] value 
             result = a - b;
         else
             result = a + b;
@@ -31,7 +33,7 @@ always@(*)begin
     XOR: result = a ^ b;
 
     SRL_SRA:begin
-        if(alu_op[3])
+        if(alu_op[3]) //based on the func7[5] value 
             result = $signed(a) >>> (b[4:0]);
         else
             result = a >> (b[4:0]);
@@ -46,3 +48,5 @@ always@(*)begin
 end
 
 endmodule
+
+`default_nettype wire
