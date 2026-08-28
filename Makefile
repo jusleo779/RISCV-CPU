@@ -45,6 +45,22 @@ test:
 	bash selftest/build.sh test_load_store
 	iverilog -o rtl/load_store.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_load_store.v
 	cd rtl && vvp load_store.vvp
+
+	bash selftest/build.sh test_lui_auipc
+	iverilog -o rtl/lui_auipc.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_lui_auipc.v
+	cd rtl && vvp lui_auipc.vvp
+
+	bash selftest/build.sh test_fence
+	iverilog -o rtl/fence.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_fence.v
+	cd rtl && vvp fence.vvp
+
+	bash selftest/build.sh test_ecall
+	iverilog -o rtl/ecall.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_ecall.v
+	cd rtl && vvp ecall.vvp
+
+	bash selftest/build.sh test_ebreak
+	iverilog -o rtl/ebreak.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_ebreak.v
+	cd rtl && vvp ebreak.vvp
 	
 clean:
 	rm -f rtl/*.vvp rtl/*.vcd selftest/*.o selftest/*.elf selftest/*.bin

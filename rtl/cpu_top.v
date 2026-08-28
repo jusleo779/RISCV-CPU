@@ -16,7 +16,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     // data memory
     reg [31:0] dmem[0:1023];
 
-    //before simulation
+    //before simulation (IF- Instruction Fetch)
     initial begin
         $readmemh({"../selftest/", test_file}, imem);//fills array from the start from hex file
     end
@@ -42,7 +42,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     wire [31:0] imm_u = {instr[31], instr[30:20], instr[19:12], {12{1'b0}}};  // U-type
     wire [31:0] imm_j = {{12{instr[31]}}, instr[19:12], instr[20], instr[30:25], instr[24:21], 1'b0}; // J-type 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //ALU operations
+    //ALU operations 
 
     //ALU data values
     wire[31:0] result;
@@ -97,8 +97,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
                      (opcode == 7'b1100111) ||                          // I-type (JALR - jumps)
                      (opcode == 7'b0010011) ||                          // I-type (OPI - Register-Register Arithmetic Immediate)
                      (opcode == 7'b0000011) ||                          // I-type (LOAD - LB, LH, LW, LBU, LHU)
-                     (opcode == 7'b0110011) ||                          // R-type (OP - Register-Register Arithmetic)
-                     (opcode == 7'b0001111);                            // FENCE
+                     (opcode == 7'b0110011);                            // R-type (OP - Register-Register Arithmetic)
 
     
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
