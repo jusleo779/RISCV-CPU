@@ -6,8 +6,58 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     input wire reset
 );
 
+//Pipelining(Variables)
+
+    //Instruction Fetch / Decode
+    reg [31:0] if_id_instr; 
+    reg [31:0] if_id_pc;    
+
+    //Instruction Decode / Execute 
+    reg [31:0] id_ex_pc;
+    reg [31:0] id_ex_imm_i;
+    reg [31:0] id_ex_imm_j;
+    reg [31:0] id_ex_imm_b;
+    reg [31:0] id_ex_imm_s; 
+    reg [31:0] id_ex_imm_u;
+    reg [31:0] id_ex_data1;
+    reg [31:0] id_ex_data2; 
+    reg [6:0] id_ex_opcode;        //saved for memory
+    reg [6:0] id_ex_funct7;
+    reg [2:0] id_ex_funct3; 
+    reg id_ex_alu_src;
+    reg id_ex_alu_store;
+    reg id_ex_alu_AUIPC;
+    reg id_ex_use_funct7;
+    reg [2:0] id_ex_alu_op_lo;
+    reg [4:0] id_ex_rd;            //saved for write back
+    reg id_ex_reg_write;           //saved for write back
+    reg [4:0] id_ex_rs1;           //saved for forwarding
+    reg [4:0] id_ex_rs2;           //saved for forwarding
+
+    // Execute / Memory
+    reg[6:0] ex_mem_opcode;
+    reg ex_mem_reg_write;
+    reg[31:0] ex_mem_result;
+    reg[31:0] ex_mem_data2;
+    reg[4:0] ex_mem_rd;
+    reg[31:0] ex_mem_imm_u;
+    reg [31:0] ex_mem_pc;
+
+    // Memory / Write Back
+    reg[31:0] mem_wb_wb_data;
+    reg mem_wb_reg_write;
+    reg[4:0] mem_wb_rd;
+
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//Instruction Fetch Stage
+
     // Program Counter
     reg [31:0] pc = 32'b0; //holds address of current instruction
+
 
     // Instruction memory: word-addressed, 32-bit wide
     reg [31:0] imem [0:1023]; //1024 instances of imem(an array) that holds 32 bits
@@ -23,27 +73,30 @@ module cpu_top#( //use other modules to send specific instructions to provide th
 
     assign instr = imem[pc[11:2]]; //memory of instructions that is held at the address in pc
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Instruction Decode Stage
+
     // Decode stub — pull out fields, don't act on them yet
-    // set bit locations by architecture
-    wire [6:0] opcode = instr[6:0];
-    wire [4:0] rd     = instr[11:7];
-    wire [2:0] funct3 = instr[14:12];
-    wire [4:0] rs1    = instr[19:15];
-    wire [4:0] rs2    = instr[24:20];
-    wire [6:0] funct7 = instr[31:25];
+    // set bit locations by architecture (R-Type)
+    wire [6:0] opcode = if_id_instr[6:0];
+    wire [4:0] rd     = if_id_instr[11:7];
+    wire [2:0] funct3 = if_id_instr[14:12];
+    wire [4:0] rs1    = if_id_instr[19:15];
+    wire [4:0] rs2    = if_id_instr[24:20];
+    wire [6:0] funct7 = if_id_instr[31:25];
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //immediate values
-
+    //Immediate values
     //set bit locations by architecture
-    wire [31:0] imm_i = {{20{instr[31]}}, instr[31:20]};  // I-type, sign-extended
-    wire [31:0] imm_b = {{19{instr[31]}}, instr[31], instr[7], instr[30:25], instr[11:8], 1'b0}; // B-Type
-    wire [31:0] imm_s = {{21{instr[31]}}, instr[30:25], instr[11:8], instr[7]};  // S-Type
-    wire [31:0] imm_u = {instr[31], instr[30:20], instr[19:12], {12{1'b0}}};  // U-type
-    wire [31:0] imm_j = {{12{instr[31]}}, instr[19:12], instr[20], instr[30:25], instr[24:21], 1'b0}; // J-type 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //ALU operations 
+    wire [31:0] imm_i = {{20{if_id_instr[31]}}, if_id_instr[31:20]};  // I-type, sign-extended
+    wire [31:0] imm_b = {{19{if_id_instr[31]}}, if_id_instr[31], if_id_instr[7], if_id_instr[30:25], if_id_instr[11:8], 1'b0}; // B-Type
+    wire [31:0] imm_s = {{21{if_id_instr[31]}}, if_id_instr[30:25], if_id_instr[11:8], if_id_instr[7]};  // S-Type
+    wire [31:0] imm_u = {if_id_instr[31], if_id_instr[30:20], if_id_instr[19:12], {12{1'b0}}};  // U-type
+    wire [31:0] imm_j = {{12{if_id_instr[31]}}, if_id_instr[19:12], if_id_instr[20], if_id_instr[30:25], if_id_instr[24:21], 1'b0}; // J-type 
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Execute Stage    
+    
+ //ALU operations 
     //ALU data values
     wire[31:0] result;
     wire[31:0] data1, data2;
@@ -61,9 +114,26 @@ module cpu_top#( //use other modules to send specific instructions to provide th
 
     //normal operations vs load operations
     wire [2:0] alu_op_lo = (opcode == 7'b0000011 || opcode == 7'b0100011 || alu_AUIPC)? 3'b000 : funct3; //forces to add if its load/store
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //Branch Operations Mux
 
+    //Forwarding
+        //checks if the addresses are equal, there is no x0 being sent, & checks if it writes(if not it fails)
+    wire ex_mem_matches_rs1 = ((id_ex_rs1 == ex_mem_rd) && (ex_mem_rd != 0) && ex_mem_reg_write);
+    wire mem_wb_matches_rs1 = ((id_ex_rs1 == mem_wb_rd) && (mem_wb_rd != 0) && mem_wb_reg_write);
+
+        //checks if it's fits critera before saving it as the data1 value
+    wire [31:0] fwd_a_ex_mem = (ex_mem_matches_rs1)? ex_mem_result :
+                               (mem_wb_matches_rs1)? mem_wb_wb_data : id_ex_data1; 
+
+        //checks if the addresses are equal, there is no x0 being sent, & checks if it writes(if not it fails)
+    wire ex_mem_matches_rs2 = ((id_ex_rs2 == ex_mem_rd) && (ex_mem_rd != 0) && ex_mem_reg_write);
+    wire mem_wb_matches_rs2 = ((id_ex_rs2 == mem_wb_rd) && (mem_wb_rd != 0) && mem_wb_reg_write);
+
+        //checks if it's fits critera before saving it as the data2 value
+    wire [31:0] fwd_b_ex_mem = (ex_mem_matches_rs2)? ex_mem_result :
+                               (mem_wb_matches_rs2)? mem_wb_wb_data : id_ex_data2; 
+
+
+    //Branch Operations Mux
     reg comparsion;
     //funct3 dependent outputs
     parameter BEQ = 3'b000;
@@ -74,22 +144,68 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     parameter BGEU = 3'b111;
     //comparsion output dependent on funct3
     always@(*)begin
-        case(funct3)
-            BEQ: comparsion = (data1 == data2)? 1:0;
-            BNE: comparsion = (data1 != data2)? 1:0;
-            BLT: comparsion = ($signed(data1) < $signed(data2))? 1:0;
-            BGE: comparsion = ($signed(data1) >= $signed(data2))? 1:0;
-            BLTU: comparsion = (data1 < data2)? 1:0;
-            BGEU: comparsion = (data1 >= data2)? 1:0;
+        case(id_ex_funct3)
+            BEQ: comparsion = (fwd_a_ex_mem == fwd_b_ex_mem)? 1:0;
+            BNE: comparsion = (fwd_a_ex_mem != fwd_b_ex_mem)? 1:0;
+            BLT: comparsion = ($signed(fwd_a_ex_mem) < $signed(fwd_b_ex_mem))? 1:0;
+            BGE: comparsion = ($signed(fwd_a_ex_mem) >= $signed(fwd_b_ex_mem))? 1:0;
+            BLTU: comparsion = (fwd_a_ex_mem < fwd_b_ex_mem)? 1:0;
+            BGEU: comparsion = (fwd_a_ex_mem >= fwd_b_ex_mem)? 1:0;
             default: comparsion = 1'b0;
         endcase
     end
     //decides if you should allowed to branch between to addresses
-    wire branch_taken = (opcode == 7'b1100011) && comparsion;
+    wire branch_taken = (id_ex_opcode == 7'b1100011) && comparsion;
+    
+    //flushing(instructions after a JAL/JALR/Branch the next instruction should be skipped)
+    wire flush = (id_ex_opcode == 7'b1101111) || branch_taken || (id_ex_opcode == 7'b1100111);
+    
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // PC update 
+    always @(posedge clk) begin
+        if (reset)
+            pc <= 32'b0;
+        else if(id_ex_opcode == 7'b1101111) //Jump for the JAL function
+            pc <= id_ex_pc + id_ex_imm_j;
+        else if(branch_taken) //branch function
+            pc <= id_ex_pc + id_ex_imm_b;
+        else if(id_ex_opcode == 7'b1100111) //Jump for JALR function
+            pc <= (fwd_a_ex_mem + id_ex_imm_i) & ({32'hFFFFFFFE});
+        else
+            pc <=  pc + 4;
+    end
+   
+
+    alu m2(
+        .a((id_ex_alu_AUIPC)? id_ex_pc : fwd_a_ex_mem),
+        .b((id_ex_alu_src)? fwd_b_ex_mem : //dealing with R-type 
+           (id_ex_alu_store)? id_ex_imm_s : //if dealing with store force add
+           (id_ex_alu_AUIPC)? id_ex_imm_u : id_ex_imm_i), //default: I-type immediate (used by ADDI, JALR, loads)
+        .alu_op({id_ex_funct7[5] && id_ex_use_funct7, id_ex_alu_op_lo}),
+        .result(result)
+    );
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Memory Stage
+
+    //store copy for rs2 to memory
+    always@(posedge clk)begin
+        if(ex_mem_opcode == 7'b0100011)
+            dmem[ex_mem_result[11:2]] <= ex_mem_data2; 
+    end
+
+    //data memory (store copy for rs2 to memory)
+    wire[31:0] dmem_rdata = dmem[ex_mem_result[11:2]];
+
+    wire[31:0] wb_data = (ex_mem_opcode == 7'b1101111 || ex_mem_opcode == 7'b1100111)? (ex_mem_pc + 4) : // JAL / JALR 
+                         (ex_mem_opcode == 7'b0000011)? dmem_rdata : //bypasses alu since it's unneccessary
+                         (ex_mem_opcode == 7'b0110111)? ex_mem_imm_u : ex_mem_result; //LUI bypasses alu also
+    
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Write Back Stage
+
     //Write Enable to Registers
-
     //list of possible operation codes that allow for the funciton to write into the registers
     wire reg_write = (opcode == 7'b0110111) ||                          // U-type (LUI - upper immediate)
                      (opcode == 7'b0010111) ||                          // U-type (AUIPC - upper immediate)
@@ -99,70 +215,145 @@ module cpu_top#( //use other modules to send specific instructions to provide th
                      (opcode == 7'b0000011) ||                          // I-type (LOAD - LB, LH, LW, LBU, LHU)
                      (opcode == 7'b0110011);                            // R-type (OP - Register-Register Arithmetic)
 
-    
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    // PC update 
-    always @(posedge clk) begin
-        if (reset)
-            pc <= 32'b0;
-        else if(opcode == 7'b1101111) //Jump for the JAL function
-            pc <= pc + imm_j;
-        else if(branch_taken) //branch function
-            pc <= pc + imm_b;
-        else if(opcode == 7'b1100111) //Jump for JALR function
-            pc <= (data1 + imm_i) & ({32'hFFFFFFFE});
-        else
-            pc <= pc + 4;
-    end
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    wire is_ebreak = (opcode == 7'b1110011) && (instr[31:20] == 12'd1);
-
-    // Debug: print what's happening each cycle
-    always @(posedge clk) begin
-            if (!reset && !is_ebreak ) 
-            $display("pc=%0d instr=%h opcode=%b rd=%0d rs1=%0d imm_i=%0d data1=%0d data2=%0d result=%0d imm_j =%0d imm_b =%0d",
-                       pc, instr, opcode, rd, rs1, $signed(imm_i), data1, data2, result, imm_j, imm_b);
-    end
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    
-    //data memory (store copy for rs2 to memory)
-    wire[31:0] dmem_rdata = dmem[result[11:2]];
-
-    wire[31:0] wb_data = (opcode == 7'b1101111 || opcode == 7'b1100111)? (pc + 4) : // JAL / JALR 
-                         (opcode == 7'b0000011)? dmem_rdata : //bypasses alu since it's unneccessary
-                         (opcode == 7'b0110111)? imm_u : result; //LUI bypasses alu also
-
-
-    alu m2(
-        .a((alu_AUIPC)? pc : data1),
-        .b((alu_src)? data2 : //dealing with R-type 
-           (alu_store)? imm_s : //if dealing with store force add
-           (alu_AUIPC)? imm_u : imm_i), //default: I-type immediate (used by ADDI, JALR, loads)
-        .alu_op({funct7[5] && use_funct7, alu_op_lo}),
-        .result(result)
-    );
-    
+    //writes the data / sets the data1 & data2
     regfile m1(
         .clk(clk),
         .rs1_addr(rs1),
         .rs2_addr(rs2),
-        .rd_addr(rd),
-        .rd_data(wb_data),
-        .write_enable(reg_write),
+        .rd_addr(mem_wb_rd),
+        .rd_data(mem_wb_wb_data),
+        .write_enable(mem_wb_reg_write),
         .rs1_data(data1),
         .rs2_data(data2)
     );
 
-    //store copy for rs2 to memory
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//DEBUGGING    
+    wire is_ebreak = (opcode == 7'b1110011) && (if_id_instr[31:20] == 12'd1);
+
+    // Debug: print what's happening each cycle
+    always @(posedge clk) begin
+    if (!reset && !is_ebreak)
+        $display("IF: pc=%0d | ID: instr=%h rs1=%0d rs2=%0d rd=%0d | EX: op=%b rs1=%0d rd=%0d res=%0d | MEM: rd=%0d wb=%0d | WB: rd=%0d data=%0d rw=%b",
+            pc,
+            if_id_instr, rs1, rs2, rd,
+            id_ex_opcode, id_ex_rs1, id_ex_rd, result,
+            ex_mem_rd, wb_data,
+            mem_wb_rd, mem_wb_wb_data, mem_wb_reg_write
+            );
+    end
+    
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Pipelining(saving instructions from previous states to be used)
+ 
+ // IF(Instruction Fetch) / ID (Instruction Decode)
+
     always@(posedge clk)begin
-        if(opcode == 7'b0100011)
-            dmem[result[11:2]] <= data2; 
+        if(reset)begin
+            if_id_instr <= 32'd0;
+            if_id_pc <= 32'd0;
+        end
+        else if(flush) 
+            if_id_instr <= 32'd0;
+        else begin
+            if_id_instr <= instr;
+            if_id_pc <= pc;
+        end
+        
+    end    
+
+  // ID (Instruction Decode) / EX (Execute)
+
+    always@(posedge clk)begin
+        if(reset)begin
+            id_ex_pc <= 32'd0;
+            id_ex_imm_i <= 32'd0;
+            id_ex_imm_j <= 32'd0;
+            id_ex_imm_b <= 32'd0;
+            id_ex_imm_s <= 32'd0;
+            id_ex_imm_u <= 32'd0;
+            id_ex_data1 <= 32'd0;
+            id_ex_data2 <= 32'd0;
+            id_ex_opcode <= 7'd0;
+            id_ex_funct7 <= 7'd0;
+            id_ex_funct3 <= 3'd0;
+            id_ex_alu_src <= 0;
+            id_ex_alu_store <= 0;
+            id_ex_alu_AUIPC <= 0;
+            id_ex_use_funct7 <= 0;
+            id_ex_alu_op_lo <= 3'd0;
+            id_ex_rd <= 5'd0;
+            id_ex_reg_write <= 0;
+            id_ex_rs1 <= 5'd0;
+            id_ex_rs2 <= 5'd0;
+        end
+        else if(flush)begin 
+            id_ex_opcode <= 7'b0000000;
+            id_ex_reg_write <= 1'b0; 
+        end
+        else begin
+            id_ex_pc <= if_id_pc;
+            id_ex_imm_i <= imm_i;
+            id_ex_imm_j <= imm_j;
+            id_ex_imm_b <= imm_b;
+            id_ex_imm_s <= imm_s;
+            id_ex_imm_u <= imm_u;
+            id_ex_data1 <= data1;
+            id_ex_data2 <= data2;
+            id_ex_opcode <= opcode;
+            id_ex_funct7 <= funct7;
+            id_ex_funct3 <= funct3;
+            id_ex_alu_src <= alu_src;
+            id_ex_alu_store <= alu_store;
+            id_ex_alu_AUIPC <= alu_AUIPC;
+            id_ex_use_funct7 <= use_funct7;
+            id_ex_alu_op_lo <= alu_op_lo;
+            id_ex_rd <= rd;
+            id_ex_reg_write <= reg_write;
+            id_ex_rs1 <= rs1;
+            id_ex_rs2 <= rs2;
+        end
+    end    
+
+   // EX(Execute) / MEM(Memory)
+    always@(posedge clk)begin
+        if(reset)begin
+            //ex_mem_opcode;
+            ex_mem_reg_write <= 0;
+            ex_mem_result <= 32'd0;
+            ex_mem_data2 <= 32'd0;
+            ex_mem_rd <= 5'd0;
+            ex_mem_imm_u <= 32'd0;
+            ex_mem_pc <= 32'd0;
+            ex_mem_opcode <= 7'd0;
+        end
+        else begin
+            ex_mem_reg_write <= id_ex_reg_write;
+            ex_mem_result <= result;
+            ex_mem_data2 <= fwd_b_ex_mem;
+            ex_mem_rd <= id_ex_rd;
+            ex_mem_imm_u <= id_ex_imm_u;
+            ex_mem_pc <= id_ex_pc;
+            ex_mem_opcode <= id_ex_opcode;
+        end
     end
 
-    
-  
-    
+    //Memory / Write back
+    always@(posedge clk)begin
+        if(reset)begin
+            mem_wb_wb_data <= 32'd0;
+            mem_wb_reg_write <= 0;
+            mem_wb_rd <= 5'd0;
+        end
+        else begin
+            mem_wb_wb_data <= wb_data;
+            mem_wb_reg_write <= ex_mem_reg_write;
+            mem_wb_rd <= ex_mem_rd;
+        end
+    end
+
 
 endmodule
 

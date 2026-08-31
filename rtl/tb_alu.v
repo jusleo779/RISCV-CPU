@@ -22,7 +22,7 @@ module tb_alu;
         #10 reset = 0;
 
         wait (dut.opcode == 7'b1101111 && dut.imm_j == 0);
-        #1; // let the last write settle
+        repeat (10) @(posedge clk); //allows pipeline to do all operations before sending out the values
 
         //assertions
         //x1
@@ -167,8 +167,9 @@ module tb_alu;
         
         
         //j loop
-        if (dut.pc !== 32'h70)begin
-             $display("FAIL:pc=%h, expected 0x70", dut.pc);
+        //became a range since issue of oscillating between values because the jump istrying jump to itself
+        if (!(dut.pc >= 32'h70 && dut.pc <= 32'h74))begin 
+             $display("FAIL:pc=%h, expected 0x70 - 0x74", dut.pc);
              errors = errors + 1;
         end
         

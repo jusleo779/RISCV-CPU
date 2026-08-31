@@ -23,7 +23,7 @@ module tb_branch;
         #10 reset = 0;
 
         wait (dut.opcode == 7'b1101111 && dut.imm_j == 0);//PC stop changing when imm_j = 0 with jump opcode
-        #1; // let the last write settle
+        repeat (10) @(posedge clk); //allows pipeline to do all operations before sending out the values
 
         //assertions 
         // x1 

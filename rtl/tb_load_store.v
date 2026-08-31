@@ -20,7 +20,7 @@ module tb_load_store();
             #10 reset = 0;
 
             wait (dut.opcode == 7'b1101111 && dut.imm_j == 0);
-            #1; 
+            repeat (10) @(posedge clk); //allows pipeline to do all operations before sending out the values
 
             //x5
             if(dut.m1.registers[5] !== 32'd100)begin
