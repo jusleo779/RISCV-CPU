@@ -33,6 +33,21 @@ test-ebreak:
 	iverilog -o rtl/ebreak.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_ebreak.v
 	cd rtl && vvp ebreak.vvp
 
+test-stall1:
+	bash selftest/build.sh test_stall1
+	iverilog -o rtl/stall1.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_stall1.v
+	cd rtl && vvp stall1.vvp
+
+test-stall2:
+	bash selftest/build.sh test_stall2
+	iverilog -o rtl/stall2.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_stall2.v
+	cd rtl && vvp stall2.vvp
+
+test-stall3:
+	bash selftest/build.sh test_stall3
+	iverilog -o rtl/stall3.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_stall3.v
+	cd rtl && vvp stall3.vvp
+
 test:
 	bash selftest/build.sh test_branch
 	iverilog -o rtl/branch.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_branch.v
@@ -61,6 +76,18 @@ test:
 	bash selftest/build.sh test_ebreak
 	iverilog -o rtl/ebreak.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_ebreak.v
 	cd rtl && vvp ebreak.vvp
+
+	bash selftest/build.sh test_stall1
+	iverilog -o rtl/stall1.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_stall1.v
+	cd rtl && vvp stall1.vvp
+	
+	bash selftest/build.sh test_stall2
+	iverilog -o rtl/stall2.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_stall2.v
+	cd rtl && vvp stall2.vvp
+
+	bash selftest/build.sh test_stall3
+	iverilog -o rtl/stall3.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_stall3.v
+	cd rtl && vvp stall3.vvp
 	
 clean:
 	rm -f rtl/*.vvp rtl/*.vcd selftest/*.o selftest/*.elf selftest/*.bin
