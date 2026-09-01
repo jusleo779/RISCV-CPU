@@ -340,7 +340,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
         end
     end
 
-    //Memory / Write back
+    // Memory / Write back
     always@(posedge clk)begin
         if(reset)begin
             mem_wb_wb_data <= 32'd0;
