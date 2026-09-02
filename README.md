@@ -95,6 +95,7 @@ Each instruction group gets its own testbench and test program. Assertions check
 - ALU control: STORE's opcode wasn't covered in `alu_op_lo`, the same funct3 collision pattern that affected LOAD/SLT.
 - `dmem` indexing mixed `result[11:2]` and raw `result` inconsistently between read and write.
 - The forwarding mux selected `ex_mem_result` without checking for a load so the computed address got forwarded instead of the loaded word
+- The LUI simulation will output X as a `result` from the execute stage. But it's not essential since the program doesn't use result from ALU. 
 
 ## Scope
 
