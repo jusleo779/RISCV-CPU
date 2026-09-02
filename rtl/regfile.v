@@ -11,6 +11,15 @@ module regfile( //storage that can be called from
 );
     reg [31:0] registers [0:31];
 
+    integer i;
+    `ifdef SYNTHESIS
+    initial begin
+        for(i = 0; i < 32; i = i + 1)
+            registers[i] = 32'hDEADBEEF;
+    end   
+    `endif
+
+
     wire check_write = write_enable && rd_addr != 5'd0;
 
     //Adds values to register 

@@ -4,7 +4,7 @@ A pipelined RV32I core written in Verilog, verified in simulation.
 
 ## Status
 
-Fully pipelined CPU implementation completed with flushing, forwarding, and stalling. Verified fully in simulation with all test passing with new architecture. 
+Fully pipelined CPU implementation completed with flushing, forwarding, and stalling. Verified fully in simulation with all test.
 
 ## Instructions Implemented
 
@@ -38,14 +38,13 @@ Fully pipelined CPU implementation completed with flushing, forwarding, and stal
 
 ## Pipeline
 
-**Pipelining** is the idea of doing overlapping different operations (IF, ID, EX, MEM, WB) to increase the throughput(instructions/time). The pipeline was seperated into 4 different registers but causes hazards. Hazards occur when the execute operation needs a value from the an instruction above that hasn't finished all the stages before it's called. This leads to forwarding, load-use stall, and flushing.
+**Pipelining** is the idea of doing overlapping different operations (IF, ID, EX, MEM, WB) to increase the throughput(instructions/time). The pipeline was separated into 4 different registers (IF/ID, ID/EX, EX/MEM, MEM/WB) but causes hazards. Hazards occur when the execute operation needs a value that hasn't finished all the stages before it is called. This leads to forwarding, load-use stall, and flushing.
 
-**Forwarding** allows the program to send the final execute or memory stage's value to the current instruction that is calling for it's value. Forwarding is used by every operation that has a situation where they call a value that hasn't finished it's operations, which is usually when there is no or 1 instruction gap between instructions. 
+**Forwarding** allows the program to send the final execute or memory stage's value to the current instruction that is calling for its value. Forwarding is used by every operation that has a situation where they call a value that hasn't finished its operations, which is usually when there is no or 1 instruction gap between instructions. 
 
-**Load-use stall** This allows for the program to wait for the instruction ahead to reach the memory/write back stage to forward the value to the instruction that is calling it.
+**Load-use stall** This allows for the program to wait one cycle for the instruction ahead to reach memory. Then the load is in memory, which normal forwarding sends the value.
 
-**Flushing** is used when we are using JAL, JALR, or branch which skips over the next instruction but due to the pipelining it will save the instruction that shouldn't be saved.
-
+**Flushing**  A taken branch or jump occurs after finishing EX, but by that time the IF/ID and ID/EX hold instructions from the wrong path. Both are removed.
 
 ## Design Decisions
 
@@ -53,7 +52,19 @@ Fully pipelined CPU implementation completed with flushing, forwarding, and stal
 
 **ECALL and EBREAK** halt simulation instead of trapping. The project scope excludes CSRs and the privileged architecture, so no trap handler exists to jump to. Detection happens in the testbench, not in `cpu_top.v`, keeping the CPU module free of simulation-only constructs. Every other testbench in this project follows the same pattern: `cpu_top.v` describes hardware, the testbench decides when the simulation ends.
 
-**Load/store timing.** The design assumes asynchronous-read memory. FPGA block RAM reads synchronously, so this design targets simulation. FPGA deployment deferred to future work. 
+**Load/store timing** The design assumes asynchronous-read memory. FPGA block RAM reads synchronously, so this design targets simulation. FPGA deployment deferred to future work. 
+
+**Register file initialization** X does not exist on hardware, an uninitialized FPGA memory comes up holding whatever the synthesis tool assigned. The register file is therefore initialized to a sentinel value `0xDEADBEEF` via an initial block, which Vivado bakes into the BRAM `INIT` attributes at configuration time rather than costing runtime logic. Zeros were the alternative, rejected because a register reading 0 is indistinguishable from legitimately computed 0, while the sentinel is obviously wrong on sight. 
+
+The initial block sits behind `` `ifdef SYNTHESIS ``, so simulation keeps X while hardware gets the sentinel.
+
+## Known Simulation Artifacts
+
+In `test_lui_auipc`, the ALU output reads X during the EX stage of the instruction. X survives because the sentinel is synthesis only. This is expected, not a bug.
+
+LUI has no rs1 field, bits [19:15], which are a part of the immediate in the format. The decode extracts rs1 unconditionally from every instruction which leads to the bits decoded as x8, which reads a register that no instruction has written. In simulation an unwritten `reg` reads X, so the ALU computes X.
+
+The result is never consumed: `wb_data` muxes LUI to `ex_mem_imm_u` and not `result`. Preventing the read would mean adding decode-dependent logic to the read path to prevent a value that is useless. So the value is just left as is. 
 
 ## Structure
 
@@ -95,7 +106,6 @@ Each instruction group gets its own testbench and test program. Assertions check
 - ALU control: STORE's opcode wasn't covered in `alu_op_lo`, the same funct3 collision pattern that affected LOAD/SLT.
 - `dmem` indexing mixed `result[11:2]` and raw `result` inconsistently between read and write.
 - The forwarding mux selected `ex_mem_result` without checking for a load so the computed address got forwarded instead of the loaded word
-- The LUI simulation will output X as a `result` from the execute stage. But it's not essential since the program doesn't use result from ALU. 
 
 ## Scope
 
@@ -103,4 +113,4 @@ RV32I base integer instruction set, 38 instructions per the original scoping doc
 
 ## Next Steps
 
-FPGA synthesis. This introduces physical limitations to my program that wouldn't be affected in simulation. This means multiple checks and corrections to my program to allow my FPGA to synthesize the program to test on the FPGA. Then I will need to create mapping to correlate different FPGA components to specific features of the CPU. 
+FPGA synthesis. This introduces physical limitations to my program that wouldn't be affected in simulation. This means corrections to my program to allow my FPGA to synthesize the program to test on the FPGA. Then I will need to create mapping to correlate different FPGA components to specific features of the CPU. 
