@@ -52,7 +52,7 @@ Fully pipelined CPU implementation completed with flushing, forwarding, and stal
 
 **ECALL and EBREAK** halt simulation instead of trapping. The project scope excludes CSRs and the privileged architecture, so no trap handler exists to jump to. Detection happens in the testbench, not in `cpu_top.v`, keeping the CPU module free of simulation-only constructs. Every other testbench in this project follows the same pattern: `cpu_top.v` describes hardware, the testbench decides when the simulation ends.
 
-**Load/store timing** The design assumes asynchronous-read memory. FPGA block RAM reads synchronously, so this design targets simulation. FPGA deployment deferred to future work. 
+**Load/store timing** Block RAM reads synchronously, while my old design had an asynchronous read. I moved the data memory from MEM to EX, which allowed for the BRAM to see the address earlier with the data available at the start of MEM. There are no extra cycles and no change in load-use stall. The stall isn't preventing this instruction because the stall is waiting for the load instruction to be called.
 
 **Register file initialization** X does not exist on hardware, an uninitialized FPGA memory comes up holding whatever the synthesis tool assigned. The register file is therefore initialized to a sentinel value `0xDEADBEEF` via an initial block, which Vivado bakes into the BRAM `INIT` attributes at configuration time rather than costing runtime logic. Zeros were the alternative, rejected because a register reading 0 is indistinguishable from legitimately computed 0, while the sentinel is obviously wrong on sight. 
 
