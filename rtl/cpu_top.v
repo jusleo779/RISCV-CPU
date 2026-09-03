@@ -34,6 +34,8 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     reg [4:0] id_ex_rs1;           //saved for forwarding
     reg [4:0] id_ex_rs2;           //saved for forwarding
 
+    reg [31:0] dmem_rdata; 
+
     // Execute / Memory
     reg[6:0] ex_mem_opcode;
     reg ex_mem_reg_write;
@@ -188,17 +190,20 @@ module cpu_top#( //use other modules to send specific instructions to provide th
         .result(result)
     );
 
+    // Originally in memory, but was moved to allow the BRAM in the FPGA to recieve the 
+    // address and value early enough
+    always@(posedge clk)begin
+        if(id_ex_opcode == 7'b0100011)
+            dmem[result[11:2]] <= fwd_b_ex_mem;     // store copy for rs2 to memory
+        if(id_ex_opcode == 7'b0000011)
+            dmem_rdata <= dmem[result[11:2]];        // data memory load
+    end
+  
+   
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //Memory Stage
 
-    //store copy for rs2 to memory
-    always@(posedge clk)begin
-        if(ex_mem_opcode == 7'b0100011)
-            dmem[ex_mem_result[11:2]] <= ex_mem_data2; 
-    end
-
-    //data memory (store copy for rs2 to memory)
-    wire[31:0] dmem_rdata = dmem[ex_mem_result[11:2]];
 
     wire[31:0] wb_data = (ex_mem_opcode == 7'b1101111 || ex_mem_opcode == 7'b1100111)? (ex_mem_pc + 4) : // JAL / JALR 
                          (ex_mem_opcode == 7'b0000011)? dmem_rdata : //bypasses alu since it's unneccessary
