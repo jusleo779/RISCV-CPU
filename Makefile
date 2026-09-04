@@ -48,6 +48,11 @@ test-stall3:
 	iverilog -o rtl/stall3.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_stall3.v
 	cd rtl && vvp stall3.vvp
 
+test-led:
+	bash selftest/build.sh test_led
+	iverilog -o rtl/led.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_led.v
+	cd rtl && vvp led.vvp
+
 test:
 	bash selftest/build.sh test_branch
 	iverilog -o rtl/branch.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_branch.v
