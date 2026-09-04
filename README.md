@@ -56,9 +56,12 @@ Fully pipelined CPU implementation completed with flushing, forwarding, and stal
 
 **Register file initialization** X does not exist on hardware, an uninitialized FPGA memory comes up holding whatever the synthesis tool assigned. The register file is therefore initialized to a sentinel value `0xDEADBEEF` via an initial block, which Vivado bakes into the BRAM `INIT` attributes at configuration time rather than costing runtime logic. Zeros were the alternative, rejected because a register reading 0 is indistinguishable from legitimately computed 0, while the sentinel is obviously wrong on sight. 
 
+The initial block sits behind `` `ifdef SYNTHESIS ``, so simulation keeps X while hardware gets the sentinel.
+
+
 **imem read timing** `imem` is read combinationally, so it will synthesize as distributed RAM rather than block RAM. Converting it requires the fetch to be registered, which removes the ability to zero `if_id_instr` on a flush and to hold it during a stall, both currently rely on it being a normal register. Deferred until the utilization report shows whether the LUT cost matters.
 
-The initial block sits behind `` `ifdef SYNTHESIS ``, so simulation keeps X while hardware gets the sentinel.
+
 
 ## Known Simulation Artifacts
 
