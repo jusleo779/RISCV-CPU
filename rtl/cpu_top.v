@@ -3,8 +3,11 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     parameter test_file = "test_alu.hex"
 )(
     input wire clk,
-    input wire reset
+    input wire reset,
+    output reg[3:0] led_reg
 );
+
+
 
 //Pipelining(Variables)
 
@@ -193,10 +196,20 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     // Originally in memory, but was moved to allow the BRAM in the FPGA to recieve the 
     // address and value early enough
     always@(posedge clk)begin
-        if(id_ex_opcode == 7'b0100011)
-            dmem[result[11:2]] <= fwd_b_ex_mem;     // store copy for rs2 to memory
-        if(id_ex_opcode == 7'b0000011)
-            dmem_rdata <= dmem[result[11:2]];        // data memory load
+        if(reset)begin
+            led_reg <= 4'd0;
+            dmem_rdata <= 32'd0;
+        end
+        else begin
+            if(id_ex_opcode == 7'b0100011)begin
+                if(result[31])
+                    led_reg <= fwd_b_ex_mem[3:0];
+                else    
+                    dmem[result[11:2]] <= fwd_b_ex_mem;     // store copy for rs2 to memory
+            end
+            if(id_ex_opcode == 7'b0000011)
+                dmem_rdata <= dmem[result[11:2]];        // data memory load
+        end
     end
   
    
