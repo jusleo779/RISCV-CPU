@@ -4,7 +4,7 @@ A pipelined RV32I core written in Verilog, verified in simulation.
 
 ## Status
 
-Fully pipelined CPU implementation completed with flushing, forwarding, and stalling. Verified fully in simulation with all test.
+Fully pipelined CPU implementation completed with flushing, forwarding, and stalling. Verified fully in simulation with all test passing.
 
 ## Instructions Implemented
 
@@ -58,8 +58,9 @@ Fully pipelined CPU implementation completed with flushing, forwarding, and stal
 
 The initial block sits behind `` `ifdef SYNTHESIS ``, so simulation keeps X while hardware gets the sentinel.
 
-
 **imem read timing** `imem` is read combinationally, so it will synthesize as distributed RAM rather than block RAM. Converting it requires the fetch to be registered, which removes the ability to zero `if_id_instr` on a flush and to hold it during a stall, both currently rely on it being a normal register. Deferred until the utilization report shows whether the LUT cost matters.
+
+**Memory Map** `switches` and `led_reg` both required a condition when being loaded or stored onto the FPGA. I decided on `led_reg` to be dependent on bit 31 being 1 and bit 2 being 0 (`0x80000000`) from `result` because bit 31 being 1 will never output a legitimate memory address from `result`. Then we use bit 31 and 2 from `result` as the condition for `switches` (`0x80000004`) where they both have to be 1. This allows for the bit peripheral to be adjacent to each other by an offset of 4. When the `led_reg` condition passes it will output the low four bits of the stored word to drive leds, while the `switches` will use the low four bits of a loaded word. 
 
 
 

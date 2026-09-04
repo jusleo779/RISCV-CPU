@@ -203,14 +203,18 @@ module cpu_top#( //use other modules to send specific instructions to provide th
         end
         else begin
             if(id_ex_opcode == 7'b0100011)begin
-                if(result[31] && result[2] == 0)
-                    led_reg <= fwd_b_ex_mem[3:0];
+                if(result[31])begin
+                    if(!result[2])
+                        led_reg <= fwd_b_ex_mem[3:0];
+                end
                 else    
                     dmem[result[11:2]] <= fwd_b_ex_mem;     // store copy for rs2 to memory
             end
             if(id_ex_opcode == 7'b0000011)begin
-                if(result[2] && result[31])
-                    dmem_rdata <= {{28{1'b0}}, switches[3:0]};
+                if(result[31])begin
+                    if(result[2])
+                        dmem_rdata <= {{28{1'b0}}, switches[3:0]};
+                end
                 else    
                     dmem_rdata <= dmem[result[11:2]];        // data memory load
             end
