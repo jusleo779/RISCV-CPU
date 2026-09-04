@@ -52,6 +52,10 @@ test-led:
 	bash selftest/build.sh test_led
 	iverilog -o rtl/led.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_led.v
 	cd rtl && vvp led.vvp
+test-switch:
+	bash selftest/build.sh test_switch
+	iverilog -o rtl/switch.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_switch.v
+	cd rtl && vvp switch.vvp
 
 test:
 	bash selftest/build.sh test_branch
@@ -93,6 +97,14 @@ test:
 	bash selftest/build.sh test_stall3
 	iverilog -o rtl/stall3.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_stall3.v
 	cd rtl && vvp stall3.vvp
+
+	bash selftest/build.sh test_led
+	iverilog -o rtl/led.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_led.v
+	cd rtl && vvp led.vvp
+
+	bash selftest/build.sh test_switch
+	iverilog -o rtl/switch.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_switch.v
+	cd rtl && vvp switch.vvp
 	
 clean:
 	rm -f rtl/*.vvp rtl/*.vcd selftest/*.o selftest/*.elf selftest/*.bin
