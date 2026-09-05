@@ -5,7 +5,8 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     input wire clk,
     input wire reset,
     input wire [3:0] switches,
-    output reg[3:0] led_reg
+    output reg[3:0] led_reg,
+    output reg halted
 );
 
 
@@ -172,6 +173,8 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     always @(posedge clk) begin
         if (reset)
             pc <= 32'b0;
+        else if(halted)
+            pc <= pc;
         else if(id_ex_opcode == 7'b1101111) //Jump for the JAL function
             pc <= id_ex_pc + id_ex_imm_j;
         else if(branch_taken) //branch function
@@ -262,10 +265,20 @@ module cpu_top#( //use other modules to send specific instructions to provide th
 
 //DEBUGGING    
     wire is_ebreak = (opcode == 7'b1110011) && (if_id_instr[31:20] == 12'd1);
+    wire is_ecall = (opcode == 7'b1110011) && (if_id_instr[31:20] == 12'd0);
+
+    always@(posedge clk)begin
+        if(reset)begin
+            halted <= 0;
+        end
+        else if(is_ebreak || is_ecall)begin
+            halted <= 1;
+        end
+    end
 
     // Debug: print what's happening each cycle
     always @(posedge clk) begin
-    if (!reset && !is_ebreak)
+    if (!reset && !halted)
         $display("IF: pc=%0d | ID: instr=%h rs1=%0d rs2=%0d rd=%0d | EX: op=%b rs1=%0d rd=%0d res=%0d | MEM: rd=%0d wb=%0d | WB: rd=%0d data=%0d rw=%b",
             pc,
             if_id_instr, rs1, rs2, rd,
@@ -284,6 +297,9 @@ module cpu_top#( //use other modules to send specific instructions to provide th
         if(reset)begin
             if_id_instr <= 32'd0;
             if_id_pc <= 32'd0;
+        end
+        else if(halted)begin
+            if_id_instr <= 32'd0;
         end
         else if(load_use_stall)begin
             if_id_pc <= if_id_pc;

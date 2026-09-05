@@ -50,7 +50,7 @@ Fully pipelined CPU implementation completed with flushing, forwarding, and stal
 
 **FENCE** decodes as a NOP. It executes instructions strictly in program order, so no memory reordering exists for FENCE to guard against.
 
-**ECALL and EBREAK** halt simulation instead of trapping. The project scope excludes CSRs and the privileged architecture, so no trap handler exists to jump to. Detection happens in the testbench, not in `cpu_top.v`, keeping the CPU module free of simulation-only constructs. Every other testbench in this project follows the same pattern: `cpu_top.v` describes hardware, the testbench decides when the simulation ends.
+**ECALL and EBREAK** halt happens in hardware instead of trapping. The project scope excludes CSRs and the privileged architecture, so no trap handler exists to jump to. Detection happens in `cpu_top.v`, where its output is held as `halted`. It specifically halts `pc` increments and zeroes `if_id_instr`. We only halt these variables allowing for the draining of the pipelines because `ECALL` requires earlier instructions to complete.
 
 **Load/store timing** Block RAM reads synchronously, while my old design had an asynchronous read. I moved the data memory from MEM to EX, which allowed for the BRAM to see the address earlier with the data available at the start of MEM. There are no extra cycles and no change in load-use stall. The stall isn't preventing this instruction because the stall is waiting for the load instruction to be called.
 

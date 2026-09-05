@@ -2,8 +2,9 @@
 module tb_ecall(); 
             reg clk = 0;
             reg reset = 1;
+            wire halted;
 
-        cpu_top #(.test_file("test_ecall.hex")) dut(.clk(clk),.reset(reset));
+        cpu_top #(.test_file("test_ecall.hex")) dut(.clk(clk),.reset(reset),.halted(halted));
 
         always #5 clk = ~clk;
 
@@ -20,12 +21,18 @@ module tb_ecall();
             $dumpvars(0, tb_ecall);
             #10 reset = 0;
 
-            wait (dut.opcode == 7'b1110011 &&  (dut.instr[31:20] == 12'd0));
+            wait (halted);
             repeat (10) @(posedge clk); //allows pipeline to do all operations before sending out the values
 
             
             if(dut.m1.registers[1] !== 32'd5)begin
                 $display("FAIL: x1 = %0d, expected 5", dut.m1.registers[1]);
+                errors = errors + 1;
+            end
+            
+            
+            if(dut.halted !== 1'b1)begin
+                $display("FAILED to HALT correctly");
                 errors = errors + 1;
             end
 
