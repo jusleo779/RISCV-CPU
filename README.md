@@ -4,7 +4,7 @@ A pipelined RV32I core written in Verilog, verified in simulation.
 
 ## Status
 
-Fully pipelined CPU implementation completed with flushing, forwarding, and stalling. Verified fully in simulation with all test passing.
+Fully pipelined RV32I core with forwarding, stalling, and flushing. Verified in simulation and running on an Arty A7-100T at 50 MHz. Memory-mapped switches and LEDs are working on hardware.
 
 ## Instructions Implemented
 
@@ -56,7 +56,7 @@ Fully pipelined CPU implementation completed with flushing, forwarding, and stal
 
 **Register file initialization** X does not exist on hardware, an uninitialized FPGA memory comes up holding whatever the synthesis tool assigned. The register file is therefore initialized to a sentinel value `0xDEADBEEF` via an initial block, which Vivado bakes into the BRAM `INIT` attributes at configuration time rather than costing runtime logic. Zeros were the alternative, rejected because a register reading 0 is indistinguishable from legitimately computed 0, while the sentinel is obviously wrong on sight. 
 
-The initial block sits behind `` `ifdef SYNTHESIS ``, so simulation keeps X while hardware gets the sentinel. Vivado defines `SYNTHESIS` automatically, so the guard fires without add the macro to the synthesis settings.
+The initial block sits behind `` `ifdef SYNTHESIS ``, so simulation keeps X while hardware gets the sentinel. Vivado defines `SYNTHESIS` automatically, so the guard fires without adding the macro to the synthesis settings.
 
 **imem read timing** `imem` is read combinationally, so it will synthesize as distributed RAM rather than block RAM. Converting it requires the fetch to be registered, which removes the ability to zero `if_id_instr` on a flush and to hold it during a stall, both currently rely on it being a normal register. When checking the report, I found that the `imem` uses about 3% of LUTRAM and block RAM has 0 usage. With most of the FPGA's resources unused, converting `imem` to block RAM would free capacity the design has no use for. Worth revisiting if `imem` grows or LUT usage rises.
 
@@ -89,7 +89,7 @@ selftest/
   build.sh                  assemble -> hex -> simulate
 Makefile                    make test-<name> targets
 constraints/
-  Arty-A7-100-Master.xdc    Digilient refereence, unmodified
+  Arty-A7-100-Master.xdc    Digilient reference, unmodified
   riscv-cpu.xdc             project constraints
 ```
 
@@ -106,7 +106,7 @@ make test-<name>
 - Icarus Verilog (`iverilog` / `vvp`) for simulation
 - GTKWave for waveform inspection
 - xPack `riscv-none-elf-gcc` for assembling test programs
-- Vivado, for the FPGA testing bring-up on chip
+- Vivado for synthesis, implmentation, and bitstream generation
 
 ## Verification Approach
 
@@ -125,6 +125,9 @@ Each instruction group gets its own testbench and test program. Assertions check
 
 RV32I base integer instruction set, 38 instructions per the original scoping document (40 unique instructions, minus the SYSTEM collapse and FENCE-as-NOP simplification). No CSR support, no privileged architecture, no interrupt handling. Pipelined with stalling, forwarding, and flushing.
 
-## Next Steps
+## Future Project Extension
 
-FPGA synthesis. This introduces physical limitations to my program that wouldn't be affected in simulation. This means corrections to my program to allow my FPGA to synthesize the program to test on the FPGA. Then I will need to create mapping to correlate different FPGA components to specific features of the CPU. 
+Hardware validation so far covers a single program that reads the switches and writes their value to the LEDs. Branches, jumps, and arithmetic are verified in simulation but have not been exercised on the board. The next useful step is a program whose output depends on computation rather than data movement.
+
+Also open:
+- `imem` conversion to block RAM, deferred while FPGA resource usage stays low
