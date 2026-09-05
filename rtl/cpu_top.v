@@ -10,7 +10,6 @@ module cpu_top#( //use other modules to send specific instructions to provide th
 );
 
 
-
 //Pipelining(Variables)
 
     //Instruction Fetch / Decode

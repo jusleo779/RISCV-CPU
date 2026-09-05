@@ -2,6 +2,7 @@
 ## Clock signal
 set_property -dict { PACKAGE_PIN E3    IOSTANDARD LVCMOS33 } [get_ports {clk}]; #100mHz clock
 create_clock -add -name sys_clk_pin -period 10.00 -waveform {0 5} [get_ports {clk}];
+create_generated_clock -name clk_50 -source [get_pins bufg_inst/I] -divide_by 2 [get_pins bufg_inst/O]; #50 MHz
 
 ## Buttons
 set_property -dict { PACKAGE_PIN D9    IOSTANDARD LVCMOS33 } [get_ports {reset}]; #btn[0]

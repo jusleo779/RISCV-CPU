@@ -62,6 +62,10 @@ The initial block sits behind `` `ifdef SYNTHESIS ``, so simulation keeps X whil
 
 **Memory Map** `switches` and `led_reg` both required a condition when being loaded or stored onto the FPGA. I decided on `led_reg` to be dependent on bit 31 being 1 and bit 2 being 0 (`0x80000000`) from `result` because bit 31 being 1 will never output a legitimate memory address from `result`. Then we use bit 31 and 2 from `result` as the condition for `switches` (`0x80000004`) where they both have to be 1. This allows for the bit peripheral to be adjacent to each other by an offset of 4. When the `led_reg` condition passes it will output the low four bits of the stored word to drive leds, while the `switches` will use the low four bits of a loaded word. 
 
+**Clock rate** The design targets 50 MHz, not the board's 100 MHz. At 100 MHz the critical path fails by 0.364 ns, running from `ex_mem_reg_write` through the forwarding mux and ALU to the `dmem` address, then through distributed RAM to `dmem_rdata`. Most of that time is the signal travelling between parts of the chip rather than the logic computing anything, so simplifying the logic would not fix it. A divide-by-two in `cpu_fpga_top` produces the 50 MHz clock, buffered onto a global clock network with a `BUFG`. At 50 MHz: 6006 endpoints, 0 failing, 5.521 ns worst slack.
+
+The divided clock has to be declared in the XDC with `create_generated_clock`. Vivado works out clock frequencies on its own for the FPGA's dedicated clock generators, but a clock built from an ordinary toggling register looks like any other signal to it. Without the declaration, every register in the CPU goes unconstrained: timing analysis reported 1 endpoint instead of 6006 and appeared to pass.
+
 
 
 ## Known Simulation Artifacts
@@ -106,7 +110,7 @@ make test-<name>
 
 ## Verification Approach
 
-Each instruction group gets its own testbench and test program. Assertions check specific expected register values, not just "no X-state," using `!==` for comparison. Branch tests include cases where signed and unsigned comparison disagree (e.g. BLT vs BLTU on `-1` and `1`) to confirm the sign-extension logic is doing real work, not passing by coincidence. Three stall tests placed the loaded registers using different operand positions: I-type `rs1`, S-type `rs2`, S-type `rs1`.
+Each instruction group gets its own testbench and test program. Assertions check specific expected register values, not just "no X-state," using `!==` for comparison. Branch tests include cases where signed and unsigned comparison disagree (e.g. BLT vs BLTU on `-1` and `1`) to confirm the sign-extension logic is doing real work, not passing by coincidence. Three stall tests placed the loaded registers using different operand positions: I-type `rs1`, S-type `rs2`, S-type `rs1`. I/O test (`test_io_loop`) reads the switches and writes the value to the leds, in a loop. It has a stall in between each iteration due to the hazard between `lw` and `sw`. It tests if the value of the switches change by writing two different assertions. 
 
 ## Known Bugs Fixed
 
