@@ -1,8 +1,8 @@
 `default_nettype none
 module alu( //computations and operations for anything
-    input[31:0] a,
-    input[31:0] b,
-    input [3:0] alu_op, 
+    input wire [31:0] a,
+    input wire [31:0] b,
+    input wire [3:0] alu_op, 
     output reg [31:0] result
 );
 

@@ -1,6 +1,6 @@
 `default_nettype none
 module cpu_top#( //use other modules to send specific instructions to provide the output
-    parameter test_file = "test_alu.hex"
+    parameter test_file = "test_led.hex"
 )(
     input wire clk,
     input wire reset,
@@ -73,7 +73,11 @@ module cpu_top#( //use other modules to send specific instructions to provide th
 
     //before simulation (IF- Instruction Fetch)
     initial begin
-        $readmemh({"../selftest/", test_file}, imem);//fills array from the start from hex file
+    `ifdef SYNTHESIS
+            $readmemh(test_file, imem); //fills array from the start from hex file
+     `else 
+            $readmemh({"../selftest/", test_file}, imem);  // Icarus runs from rtl/
+     `endif
     end
 
     assign instr = imem[pc[11:2]]; //memory of instructions that is held at the address in pc

@@ -16,3 +16,4 @@ riscv-tests/
 *.srcs/
 *.xpr
 .Xil/
+vivado/
