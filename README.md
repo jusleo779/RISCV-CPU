@@ -20,7 +20,7 @@ Fully pipelined RV32I core with forwarding, stalling, and flushing. Verified in 
 
 **J-type:** JAL
 
-**System:** FENCE, ECALL, EBREAK
+**System:** FENCE (NOP), ECALL/EBREAK(halted)
 
 
 ## Architecture
@@ -52,7 +52,7 @@ Fully pipelined RV32I core with forwarding, stalling, and flushing. Verified in 
 
 **ECALL and EBREAK** halt happens in hardware instead of trapping. The project scope excludes CSRs and the privileged architecture, so no trap handler exists to jump to. Detection happens in `cpu_top.v`, where its output is held as `halted`. It specifically halts `pc` increments and zeroes `if_id_instr`. We only halt these variables allowing for the draining of the pipelines because `ECALL` requires earlier instructions to complete.
 
-**Load/store timing** Block RAM reads synchronously, while my old design had an asynchronous read. I moved the data memory from MEM to EX, which allowed for the BRAM to see the address earlier with the data available at the start of MEM. There are no extra cycles and no change in load-use stall. The stall isn't preventing this instruction because the stall is waiting for the load instruction to be called.
+**Load/store timing** Block RAM (BRAM) reads synchronously, which adds a cycle between address and data. If the address is left in MEM, the data would be available in WB,which requires a two-cycle stall. By presenting the address in EX, the data is available in MEM, the same as the old asynchronous design, so the stall stays at one cycle and there are no extra cycles.
 
 **Register file initialization** X does not exist on hardware, an uninitialized FPGA memory comes up holding whatever the synthesis tool assigned. The register file is therefore initialized to a sentinel value `0xDEADBEEF` via an initial block, which Vivado bakes into the BRAM `INIT` attributes at configuration time rather than costing runtime logic. Zeros were the alternative, rejected because a register reading 0 is indistinguishable from legitimately computed 0, while the sentinel is obviously wrong on sight. 
 
@@ -89,7 +89,7 @@ selftest/
   build.sh                  assemble -> hex -> simulate
 Makefile                    make test-<name> targets
 constraints/
-  Arty-A7-100-Master.xdc    Digilient reference, unmodified
+  Arty-A7-100-Master.xdc    Digilent, reference, unmodified
   riscv-cpu.xdc             project constraints
 ```
 
@@ -106,7 +106,7 @@ make test-<name>
 - Icarus Verilog (`iverilog` / `vvp`) for simulation
 - GTKWave for waveform inspection
 - xPack `riscv-none-elf-gcc` for assembling test programs
-- Vivado for synthesis, implmentation, and bitstream generation
+- Vivado for synthesis, implementation, and bitstream generation
 
 ## Verification Approach
 
@@ -123,7 +123,7 @@ Each instruction group gets its own testbench and test program. Assertions check
 
 ## Scope
 
-RV32I base integer instruction set, 38 instructions per the original scoping document (40 unique instructions, minus the SYSTEM collapse and FENCE-as-NOP simplification). No CSR support, no privileged architecture, no interrupt handling. Pipelined with stalling, forwarding, and flushing.
+RV32I base integer instruction set, 40 instructions (with EBREAK/ECALL-as-halted and FENCE-as-NOP). No CSR support, no privileged architecture, no interrupt handling. Pipelined with stalling, forwarding, and flushing.
 
 ## Future Project Extension
 
