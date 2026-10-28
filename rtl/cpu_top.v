@@ -55,6 +55,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     reg[4:0] mem_wb_rd;
 
 
+    wire[31:0] wb_data;
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //Instruction Fetch Stage
@@ -129,7 +130,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     wire mem_wb_matches_rs1 = ((id_ex_rs1 == mem_wb_rd) && (mem_wb_rd != 0) && mem_wb_reg_write);
 
         //checks if it's fits critera before saving it as the data1 value
-    wire [31:0] fwd_a_ex_mem = (ex_mem_matches_rs1)? ex_mem_result :
+    wire [31:0] fwd_a_ex_mem = (ex_mem_matches_rs1)? wb_data:
                                (mem_wb_matches_rs1)? mem_wb_wb_data : id_ex_data1; 
 
         //checks if the addresses are equal, there is no x0 being sent, & checks if it writes(if not it fails)
@@ -137,7 +138,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     wire mem_wb_matches_rs2 = ((id_ex_rs2 == mem_wb_rd) && (mem_wb_rd != 0) && mem_wb_reg_write);
 
         //checks if it's fits critera before saving it as the data2 value
-    wire [31:0] fwd_b_ex_mem = (ex_mem_matches_rs2)? ex_mem_result :
+    wire [31:0] fwd_b_ex_mem = (ex_mem_matches_rs2)? wb_data:
                                (mem_wb_matches_rs2)? mem_wb_wb_data : id_ex_data2; 
 
 
@@ -232,10 +233,9 @@ module cpu_top#( //use other modules to send specific instructions to provide th
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //Memory Stage
 
-
-    wire[31:0] wb_data = (ex_mem_opcode == 7'b1101111 || ex_mem_opcode == 7'b1100111)? (ex_mem_pc + 4) : // JAL / JALR 
-                         (ex_mem_opcode == 7'b0000011)? dmem_rdata : //bypasses alu since it's unneccessary
-                         (ex_mem_opcode == 7'b0110111)? ex_mem_imm_u : ex_mem_result; //LUI bypasses alu also
+    assign wb_data = (ex_mem_opcode == 7'b1101111 || ex_mem_opcode == 7'b1100111)? (ex_mem_pc + 4) : // JAL / JALR 
+                     (ex_mem_opcode == 7'b0000011)? dmem_rdata : //bypasses alu since it's unneccessary
+                     (ex_mem_opcode == 7'b0110111)? ex_mem_imm_u : ex_mem_result; //LUI bypasses alu also
     
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

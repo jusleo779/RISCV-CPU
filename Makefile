@@ -18,6 +18,11 @@ test-lui_auipc:
 	iverilog -o rtl/lui_auipc.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_lui_auipc.v
 	cd rtl && vvp lui_auipc.vvp
 
+test-lui:
+	bash selftest/build.sh test_lui
+	iverilog -o rtl/lui.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_lui.v
+	cd rtl && vvp lui.vvp
+
 test-fence:
 	bash selftest/build.sh test_fence
 	iverilog -o rtl/fence.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_fence.v
@@ -115,6 +120,10 @@ test:
 	bash selftest/build.sh test_io_loop
 	iverilog -o rtl/io_loop.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_io_loop.v
 	cd rtl && vvp io_loop.vvp
+
+	bash selftest/build.sh test_lui
+	iverilog -o rtl/lui.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_lui.v
+	cd rtl && vvp lui.vvp
 	
 clean:
 	rm -f rtl/*.vvp rtl/*.vcd selftest/*.o selftest/*.elf selftest/*.bin
