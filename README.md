@@ -72,9 +72,7 @@ The divided clock has to be declared in the XDC with `create_generated_clock`. V
 
 In `test_lui_auipc`, the ALU output reads X during the EX stage of the instruction. X survives because the sentinel is synthesis only. This is expected, not a bug.
 
-LUI has no rs1 field, bits [19:15], which are a part of the immediate in the format. The decode extracts rs1 unconditionally from every instruction which leads to the bits decoded as x8, which reads a register that no instruction has written. In simulation an unwritten `reg` reads X, so the ALU computes X.
-
-The result is never consumed: `wb_data` muxes LUI to `ex_mem_imm_u` and not `result`. Preventing the read would mean adding decode-dependent logic to the read path to prevent a value that is useless. So the value is just left as is. 
+LUI has no rs1 field, bits [19:15], which are a part of the immediate in the format. The decode extracts rs1 unconditionally from every instruction which leads to the bits decoded as x8, which reads a register that no instruction has written. In simulation an unwritten `reg` reads X, so the ALU computes X. This X is harmless: both forwarding and writeback take LUI’s value from `wb_data`, which selects `ex_mem_imm_u` instead of the ALU result.
 
 ## Structure
 
@@ -118,7 +116,7 @@ Each instruction group gets its own testbench and test program. Assertions check
 - `imm_s`: sign-extension was 20 bits instead of 21.
 - ALU control: STORE's opcode wasn't covered in `alu_op_lo`, the same funct3 collision pattern that affected LOAD/SLT.
 - `dmem` indexing mixed `result[11:2]` and raw `result` inconsistently between read and write.
-- The forwarding mux selected `ex_mem_result` without checking for a load so the computed address got forwarded instead of the loaded word
+- During EX stage, I forwarded `ex_mem_result`, the previous instruction's ALU output. For LUI, that ALU output (x8 + I-immediate) is not LUI’s real result. This issue didn't affect the loads and jumps because of the flushing protecting JAL/JALR and stalling protecting load. The fix was to forward `wb_data`, which already had the correct value. I proved that the fix worked by creating `test_lui.s` (`lui x1, 0x12345 -> addi x2, x1, 50`), which originally failed with `x2 = X` and passed with `x2 = 0x12345032`. `wb_data` also selects `dmem_rdata` for loads and `ex_mem_pc + 4` for JAL/JALR, so forwarding is now correct for every instruction type, not just when the stall or flush happens to prevent the problem.
 - `alu.v` and `regfile.v` declared ports without an explicit wire. Under  `` `default_nettype none `` this is invalid, but Icarus compiled it anyway; Vivado rejected it. Added wire to every port declaration.
 
 ## Scope
