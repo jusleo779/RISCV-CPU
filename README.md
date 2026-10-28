@@ -67,7 +67,6 @@ The initial block sits behind `` `ifdef SYNTHESIS ``, so simulation keeps X whil
 The divided clock has to be declared in the XDC with `create_generated_clock`. Vivado works out clock frequencies on its own for the FPGA's dedicated clock generators, but a clock built from an ordinary toggling register looks like any other signal to it. Without the declaration, every register in the CPU goes unconstrained: timing analysis reported 1 endpoint instead of 6006 and appeared to pass.
 
 
-
 ## Known Simulation Artifacts
 
 In `test_lui_auipc`, the ALU output reads X during the EX stage of the instruction. X survives because the sentinel is synthesis only. This is expected, not a bug.

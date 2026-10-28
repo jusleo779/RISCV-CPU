@@ -170,8 +170,8 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     wire flush = (id_ex_opcode == 7'b1101111) || branch_taken || (id_ex_opcode == 7'b1100111);
     
     //stall
-    wire load_use_stall = (id_ex_rd != 5'd0) && (id_ex_opcode == 7'b0000011) && 
-                          ((id_ex_rd == rs1) || (id_ex_rd == rs2));
+    wire load_use_stall = 1'b0;//(id_ex_rd != 5'd0) && (id_ex_opcode == 7'b0000011) && 
+                          //((id_ex_rd == rs1) || (id_ex_rd == rs2));
 
     // PC update 
     always @(posedge clk) begin
