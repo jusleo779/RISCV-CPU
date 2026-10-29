@@ -4,7 +4,16 @@ A pipelined RV32I core written in Verilog, verified in simulation.
 
 ## Status
 
-Fully pipelined RV32I core with forwarding and flushing. Verified in simulation and running on an Arty A7-100T at 50 MHz. Memory-mapped switches and LEDs are working on hardware.
+Fully pipelined RV32I core with forwarding and flushing. Verified in simulation and running on an Arty A7-100T at 50 MHz.
+
+| | |
+|---|---|
+| ISA | RV32I, 40 instructions |
+| Pipeline | 5-stage, full forwarding, no load-use stall |
+| Clock | 50 MHz on Arty A7-100T (WNS 4.482 ns) |
+| Hardware | Memory-mapped switches and LEDs; `test_io_loop` validated on board |
+| Tests | 14 simulation tests (`make test`) |
+| Resources | 1329 (2%) LUTs, 329 (1%) FFs, 556 (3%) LUTRAM |
 
 ## Instructions Implemented
 
@@ -55,32 +64,44 @@ A taken branch or jump occurs after finishing EX, but by that time the IF/ID and
 
 ## Design Decisions
 
+| Decision | Choice | Why |
+|---|---|---|
+| FENCE | NOP | In-order core, nothing to reorder |
+| ECALL/EBREAK | Halt in hardware | No CSRs or trap handler in scope |
+| Load/Store Timing | Address presented in EX | Synchronous read returns data in MEM, which enabled the stall removal | 
+| Load-use Stall | Removed | Forwarding `wb_data` gives load data in time; −1 cycle per load-use |
+| Register File Initialization| Sentinel value `0xDEADBEEF` | A stray `0` looks like a real result; the sentinel is obviously wrong |
+| Imem Read Timing | kept the LUT RAM usage instead of BRAM  | BRAM needs a registered fetch, which breaks flush-zeroing; LUTRAM use is only ~3% |
+| Memory Map | Representation on FPGA using result's bit 31 as an identifier for leds (`0x80000000`) and switches(`0x80000004`)  | bit 31 is never set in a real memory address |
+| Clock Rate | targets 50 MHz | The critical path fails when its at 100 MHz with the stall (retest pending) |
+
+
 ### FENCE
 FENCE decodes as a NOP. It executes instructions strictly in program order, so no memory reordering exists for FENCE to guard against.
 
 ### ECALL / EBREAK
 ECALL and EBREAK halt happens in hardware instead of trapping. The project scope excludes CSRs and the privileged architecture, so no trap handler exists to jump to. Detection happens in `cpu_top.v`, where its output is held as `halted`. It specifically halts `pc` increments and zeroes `if_id_instr`. We only halt these variables allowing for the draining of the pipelines because `ECALL` requires earlier instructions to complete.
 
-### Load/store timing
+### Load/Store Timing
 Block RAM (BRAM) reads synchronously, so the data arrives one cycle after the address. If the address is left in MEM, the data would be available in WB, which requires a two-cycle stall. By presenting the address in EX, the data is available in MEM, the same as the old asynchronous design, which is what made it possible to remove the load-use stall.
 
-### Load-use stall (removed)
- Previously, an instruction that used a load’s result immediately was stalled for one cycle. The stall was needed because EX/MEM forwarding used `ex_mem_result`, which for a load holds the address (e.g. x1(24) in `test_stall1`), not the data (99). Stalling let the load reach WB, where `mem_wb_wb_data` held the correct value. Forwarding now uses `wb_data`, which selects `dmem_rdata` for loads, so the stall is no longer needed. Each load-use pair saves one cycle (`test_stall1`: 175 → 165 time units), and timing still passes at 50 MHz (WNS: 6.5 ns).
+### Load-use Stall (removed)
+ Previously, an instruction that used a load’s result immediately was stalled for one cycle. The stall was needed because EX/MEM forwarding used `ex_mem_result`, which for a load holds the address (e.g. x1(24) in `test_stall1`), not the data (99). Stalling let the load reach WB, where `mem_wb_wb_data` held the correct value. Forwarding now uses `wb_data`, which selects `dmem_rdata` for loads, so the stall is no longer needed. Each load-use pair saves one cycle (`test_stall1`: 175 → 165 time units), and timing still passes at 50 MHz (WNS: 4.482 ns).
 
-### Register file initialization
- X does not exist on hardware, an uninitialized FPGA memory comes up holding whatever the synthesis tool assigned. The register file is therefore initialized to a sentinel value `0xDEADBEEF` via an initial block, which Vivado bakes into the BRAM `INIT` attributes at configuration time rather than costing runtime logic. Zeros were the alternative, rejected because a register reading 0 is indistinguishable from legitimately computed 0, while the sentinel is obviously wrong on sight. 
+### Register File Initialization
+ X does not exist on hardware; an uninitialized FPGA memory comes up holding whatever the synthesis tool assigned. The register file is therefore initialized to a sentinel value `0xDEADBEEF` via an initial block, which Vivado bakes into the memory’s initial contents at configuration time rather than costing runtime logic. Zeros were the alternative, rejected because a register reading 0 is indistinguishable from legitimately computed 0, while the sentinel is obviously wrong on sight. 
 
 The initial block sits behind `` `ifdef SYNTHESIS ``, so simulation keeps X while hardware gets the sentinel. Vivado defines `SYNTHESIS` automatically, so the guard fires without adding the macro to the synthesis settings.
 
 
-### imem read timing
+### Imem Read Timing
 `imem` is read combinationally, so it will synthesize as distributed RAM rather than BRAM. Converting it requires the fetch to be registered, which removes the ability to zero `if_id_instr` on a flush that currently relies on it being a normal register. When checking the report, I found that the `imem` uses about 3% of LUTRAM and block RAM has 0 usage. With most of the FPGA's resources unused, converting `imem` to block RAM would free capacity the design has no use for. Worth revisiting if `imem` grows or LUT usage rises.
 
 ### Memory Map
 `switches` and `led_reg` both required a condition when being loaded or stored onto the FPGA. I decided on `led_reg` to be dependent on bit 31 being 1 and bit 2 being 0 (`0x80000000`) from `result` because bit 31 being 1 will never output a legitimate memory address from `result`. Then we use bit 31 and 2 from `result` as the condition for `switches` (`0x80000004`) where they both have to be 1. This allows for the bit peripheral to be adjacent to each other by an offset of 4. When the `led_reg` condition passes it will output the low four bits of the stored word to drive leds, while the `switches` will use the low four bits of a loaded word. 
 
 ### Clock rate
-The design targets 50 MHz, not the board's 100 MHz. At 100 MHz the critical path fails by 0.364 ns (measured before the load-use stall was removed), running from `ex_mem_reg_write` through the forwarding mux and ALU to the `dmem` address, then through distributed RAM to `dmem_rdata`. Most of that time is the signal travelling between parts of the chip rather than the logic computing anything, so simplifying the logic would not fix it. A divide-by-two in `cpu_fpga_top` produces the 50 MHz clock, buffered onto a global clock network with a `BUFG`. At 50 MHz: 5955 endpoints, 0 failing, 6.5 ns worst slack.
+The design targets 50 MHz, not the board's 100 MHz. At 100 MHz the critical path fails by 0.364 ns (measured before the load-use stall was removed), running from `ex_mem_reg_write` through the forwarding mux and ALU to the `dmem` address, then through distributed RAM to `dmem_rdata`. Most of that time is the signal travelling between parts of the chip rather than the logic computing anything, so simplifying the logic would not fix it. A divide-by-two in `cpu_fpga_top` produces the 50 MHz clock, buffered onto a global clock network with a `BUFG`. At 50 MHz: 5964 endpoints, 0 failing, 4.482 ns worst slack.
 
 The divided clock has to be declared in the XDC with `create_generated_clock`. Vivado works out clock frequencies on its own for the FPGA's dedicated clock generators, but a clock built from an ordinary toggling register looks like any other signal to it. Without the declaration, every register in the CPU goes unconstrained: timing analysis reported 1 endpoint instead of the ~6000 timed endpoints.
 
