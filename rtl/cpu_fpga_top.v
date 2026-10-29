@@ -20,7 +20,7 @@ module cpu_fpga_top(
     //makes it a distributable clk that has less variation in the delay
     BUFG bufg_inst (.I(clk_div), .O(clk_50)); //primitive built into Vivado
 
-    cpu_top dut(.clk(clk_50), .reset(reset), .switches(switches), .led_reg(led_reg), .halted(halted));
+    cpu_top#(.test_file("test_io_loop.hex")) dut(.clk(clk_50), .reset(reset), .switches(switches), .led_reg(led_reg), .halted(halted));
 
 endmodule
 
