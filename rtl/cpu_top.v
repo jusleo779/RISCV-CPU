@@ -169,9 +169,6 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     //flushing(instructions after a JAL/JALR/Branch the next instruction should be skipped)
     wire flush = (id_ex_opcode == 7'b1101111) || branch_taken || (id_ex_opcode == 7'b1100111);
     
-    //stall
-    wire load_use_stall = 1'b0;//(id_ex_rd != 5'd0) && (id_ex_opcode == 7'b0000011) && 
-                          //((id_ex_rd == rs1) || (id_ex_rd == rs2));
 
     // PC update 
     always @(posedge clk) begin
@@ -185,8 +182,6 @@ module cpu_top#( //use other modules to send specific instructions to provide th
             pc <= id_ex_pc + id_ex_imm_b;
         else if(id_ex_opcode == 7'b1100111) //Jump for JALR function
             pc <= (fwd_a_ex_mem + id_ex_imm_i) & ({32'hFFFFFFFE});
-        else if(load_use_stall)
-            pc <= pc;
         else
             pc <=  pc + 4;
     end
@@ -304,10 +299,6 @@ module cpu_top#( //use other modules to send specific instructions to provide th
         else if(halted)begin
             if_id_instr <= 32'd0;
         end
-        else if(load_use_stall)begin
-            if_id_pc <= if_id_pc;
-            if_id_instr <= if_id_instr;
-        end
         else if(flush) 
             if_id_instr <= 32'd0;
         else begin
@@ -342,7 +333,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
             id_ex_rs1 <= 5'd0;
             id_ex_rs2 <= 5'd0;
         end
-        else if(load_use_stall || flush)begin 
+        else if(flush)begin 
             id_ex_opcode <= 7'b0000000;
             id_ex_reg_write <= 1'b0; 
         end

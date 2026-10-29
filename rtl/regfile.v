@@ -5,7 +5,7 @@ module regfile( //storage that can be called from
     input wire [4:0] rs2_addr,          // read specified address in register 2
     input wire [4:0] rd_addr,           // write into address
     input wire [31:0] rd_data,          // data to write into register
-    input wire write_enable,       // enable write
+    input wire write_enable,            // enable write
     output wire [31:0] rs1_data,        
     output wire [31:0] rs2_data
 );

@@ -4,7 +4,7 @@ A pipelined RV32I core written in Verilog, verified in simulation.
 
 ## Status
 
-Fully pipelined RV32I core with forwarding, stalling, and flushing. Verified in simulation and running on an Arty A7-100T at 50 MHz. Memory-mapped switches and LEDs are working on hardware.
+Fully pipelined RV32I core with forwarding and flushing. Verified in simulation and running on an Arty A7-100T at 50 MHz. Memory-mapped switches and LEDs are working on hardware.
 
 ## Instructions Implemented
 
@@ -38,11 +38,15 @@ Fully pipelined RV32I core with forwarding, stalling, and flushing. Verified in 
 
 ## Pipeline
 
-**Pipelining** is the idea of doing overlapping different operations (IF, ID, EX, MEM, WB) to increase the throughput(instructions/time). The pipeline was separated into 4 different registers (IF/ID, ID/EX, EX/MEM, MEM/WB) but causes hazards. Hazards occur when the execute operation needs a value that hasn't finished all the stages before it is called. This leads to forwarding, load-use stall, and flushing.
+**Pipelining** is the idea of doing overlapping different operations (IF, ID, EX, MEM, WB) to increase the throughput(instructions/time). The pipeline was separated into 4 different registers (IF/ID, ID/EX, EX/MEM, MEM/WB) but causes hazards. Hazards occur when the execute operation needs a value that hasn't finished all the stages before it is called. This leads to forwarding and flushing.
 
-**Forwarding** allows the program to send the final execute or memory stage's value to the current instruction that is calling for its value. Forwarding is used by every operation that has a situation where they call a value that hasn't finished its operations, which is usually when there is no or 1 instruction gap between instructions. 
+**Forwarding** allows the program to send the result from a later stage (MEM or WB) back to a later instruction, before the register file has it. Forwarding is used by every operation that has a situation where they call a value that hasn't finished its operations. There are 3 different cases, where forwarding is required. 
 
-**Load-use stall** This allows for the program to wait one cycle for the instruction ahead to reach memory. Then the load is in memory, which normal forwarding sends the value.
+- Case 1:  0 separation between instructions, where EX/MEM stage forwards the `wb_data`
+- Case 2:  1 separation between instructions, where MEM/WB stage forwards the `mem_wb_wb_data`
+- Case 3:  2 separation between instructions, where the register file passes the value being written (`rd_data`) to read
+
+With 3 or more instructions between them, the value is already in the register file, so no forwarding is needed.
 
 **Flushing**  A taken branch or jump occurs after finishing EX, but by that time the IF/ID and ID/EX hold instructions from the wrong path. Both are removed.
 
@@ -52,19 +56,23 @@ Fully pipelined RV32I core with forwarding, stalling, and flushing. Verified in 
 
 **ECALL and EBREAK** halt happens in hardware instead of trapping. The project scope excludes CSRs and the privileged architecture, so no trap handler exists to jump to. Detection happens in `cpu_top.v`, where its output is held as `halted`. It specifically halts `pc` increments and zeroes `if_id_instr`. We only halt these variables allowing for the draining of the pipelines because `ECALL` requires earlier instructions to complete.
 
-**Load/store timing** Block RAM (BRAM) reads synchronously, which adds a cycle between address and data. If the address is left in MEM, the data would be available in WB,which requires a two-cycle stall. By presenting the address in EX, the data is available in MEM, the same as the old asynchronous design, so the stall stays at one cycle and there are no extra cycles.
+**Load/store timing** Block RAM (BRAM) reads synchronously, so the data arrives one cycle after the address. If the address is left in MEM, the data would be available in WB, which requires a two-cycle stall. By presenting the address in EX, the data is available in MEM, the same as the old asynchronous design, which is what made it possible to remove the load-use stall.
+
+**Load-use stall (removed)**: Previously, an instruction that used a load’s result immediately was stalled for one cycle. The stall was needed because EX/MEM forwarding used `ex_mem_result`, which for a load holds the address (e.g. x1(24) in `test_stall1`), not the data (99). Stalling let the load reach WB, where `mem_wb_wb_data` held the correct value. Forwarding now uses `wb_data`, which selects `dmem_rdata` for loads, so the stall is no longer needed. Each load-use pair saves one cycle (`test_stall1`: 175 → 165 time units), and timing still passes at 50 MHz (WNS: 6.5 ns).
 
 **Register file initialization** X does not exist on hardware, an uninitialized FPGA memory comes up holding whatever the synthesis tool assigned. The register file is therefore initialized to a sentinel value `0xDEADBEEF` via an initial block, which Vivado bakes into the BRAM `INIT` attributes at configuration time rather than costing runtime logic. Zeros were the alternative, rejected because a register reading 0 is indistinguishable from legitimately computed 0, while the sentinel is obviously wrong on sight. 
 
 The initial block sits behind `` `ifdef SYNTHESIS ``, so simulation keeps X while hardware gets the sentinel. Vivado defines `SYNTHESIS` automatically, so the guard fires without adding the macro to the synthesis settings.
 
-**imem read timing** `imem` is read combinationally, so it will synthesize as distributed RAM rather than block RAM. Converting it requires the fetch to be registered, which removes the ability to zero `if_id_instr` on a flush and to hold it during a stall, both currently rely on it being a normal register. When checking the report, I found that the `imem` uses about 3% of LUTRAM and block RAM has 0 usage. With most of the FPGA's resources unused, converting `imem` to block RAM would free capacity the design has no use for. Worth revisiting if `imem` grows or LUT usage rises.
+**imem read timing** `imem` is read combinationally, so it will synthesize as distributed RAM rather than BRAM. Converting it requires the fetch to be registered, which removes the ability to zero `if_id_instr` on a flush that currently relies on it being a normal register. When checking the report, I found that the `imem` uses about 3% of LUTRAM and block RAM has 0 usage. With most of the FPGA's resources unused, converting `imem` to block RAM would free capacity the design has no use for. Worth revisiting if `imem` grows or LUT usage rises.
 
 **Memory Map** `switches` and `led_reg` both required a condition when being loaded or stored onto the FPGA. I decided on `led_reg` to be dependent on bit 31 being 1 and bit 2 being 0 (`0x80000000`) from `result` because bit 31 being 1 will never output a legitimate memory address from `result`. Then we use bit 31 and 2 from `result` as the condition for `switches` (`0x80000004`) where they both have to be 1. This allows for the bit peripheral to be adjacent to each other by an offset of 4. When the `led_reg` condition passes it will output the low four bits of the stored word to drive leds, while the `switches` will use the low four bits of a loaded word. 
 
-**Clock rate** The design targets 50 MHz, not the board's 100 MHz. At 100 MHz the critical path fails by 0.364 ns, running from `ex_mem_reg_write` through the forwarding mux and ALU to the `dmem` address, then through distributed RAM to `dmem_rdata`. Most of that time is the signal travelling between parts of the chip rather than the logic computing anything, so simplifying the logic would not fix it. A divide-by-two in `cpu_fpga_top` produces the 50 MHz clock, buffered onto a global clock network with a `BUFG`. At 50 MHz: 6006 endpoints, 0 failing, 5.521 ns worst slack.
+**Clock rate** The design targets 50 MHz, not the board's 100 MHz. At 100 MHz the critical path fails by 0.364 ns (measured before the load-use stall was removed), running from `ex_mem_reg_write` through the forwarding mux and ALU to the `dmem` address, then through distributed RAM to `dmem_rdata`. Most of that time is the signal travelling between parts of the chip rather than the logic computing anything, so simplifying the logic would not fix it. A divide-by-two in `cpu_fpga_top` produces the 50 MHz clock, buffered onto a global clock network with a `BUFG`. At 50 MHz: 5955 endpoints, 0 failing, 6.5 ns worst slack.
 
-The divided clock has to be declared in the XDC with `create_generated_clock`. Vivado works out clock frequencies on its own for the FPGA's dedicated clock generators, but a clock built from an ordinary toggling register looks like any other signal to it. Without the declaration, every register in the CPU goes unconstrained: timing analysis reported 1 endpoint instead of 6006 and appeared to pass.
+The divided clock has to be declared in the XDC with `create_generated_clock`. Vivado works out clock frequencies on its own for the FPGA's dedicated clock generators, but a clock built from an ordinary toggling register looks like any other signal to it. Without the declaration, every register in the CPU goes unconstrained: timing analysis reported 1 endpoint instead of the ~6000 timed endpoints.
+
+
 
 
 ## Known Simulation Artifacts
@@ -107,7 +115,7 @@ make test-<name>
 
 ## Verification Approach
 
-Each instruction group gets its own testbench and test program. Assertions check specific expected register values, not just "no X-state," using `!==` for comparison. Branch tests include cases where signed and unsigned comparison disagree (e.g. BLT vs BLTU on `-1` and `1`) to confirm the sign-extension logic is doing real work, not passing by coincidence. Three stall tests placed the loaded registers using different operand positions: I-type `rs1`, S-type `rs2`, S-type `rs1`. I/O test (`test_io_loop`) reads the switches and writes the value to the leds, in a loop. It has a stall in between each iteration due to the hazard between `lw` and `sw`. It tests if the value of the switches change by writing two different assertions. 
+Each instruction group gets its own testbench and test program. Assertions check specific expected register values, not just "no X-state," using `!==` for comparison. Branch tests include cases where signed and unsigned comparison disagree (e.g. BLT vs BLTU on `-1` and `1`) to confirm the sign-extension logic is doing real work, not passing by coincidence. Three load-use tests placed the loaded registers using different operand positions: I-type `rs1`, S-type `rs2`, S-type `rs1`. I/O test (`test_io_loop`) reads the switches and writes the value to the leds, in a loop. It tests if the value of the switches change by writing two different assertions. 
 
 ## Known Bugs Fixed
 
@@ -120,7 +128,7 @@ Each instruction group gets its own testbench and test program. Assertions check
 
 ## Scope
 
-RV32I base integer instruction set, 40 instructions (with EBREAK/ECALL-as-halted and FENCE-as-NOP). No CSR support, no privileged architecture, no interrupt handling. Pipelined with stalling, forwarding, and flushing.
+RV32I base integer instruction set, 40 instructions (with EBREAK/ECALL-as-halted and FENCE-as-NOP). No CSR support, no privileged architecture, no interrupt handling. Pipelined with forwarding and flushing.
 
 ## Future Project Extension
 
