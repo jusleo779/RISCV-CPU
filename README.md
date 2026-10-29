@@ -118,6 +118,7 @@ LUI has no rs1 field, bits [19:15], which are a part of the immediate in the for
 
 ```
 rtl/
+  cpu_fpga_top.v            top-level for FPGA and change clock speed to 50 MHz
   cpu_top.v                 top-level datapath and control
   regfile.v                 32x32 register file, x0 hardwired to zero
   alu.v                     10-operation ALU  
