@@ -17,3 +17,8 @@ riscv-tests/
 *.xpr
 .Xil/
 vivado/
+selftest/*.o
+selftest/*.elf
+selftest/*.bin
+rtl/*.vvp
+*.vcd
