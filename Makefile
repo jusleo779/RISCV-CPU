@@ -53,6 +53,11 @@ test-stall2:
 	iverilog -o rtl/stall2.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_stall2.v
 	cd rtl && vvp stall2.vvp
 
+test-load-gap2:
+	bash selftest/build.sh test_load_gap2
+	iverilog -o rtl/load_gap2.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_load_gap2.v
+	cd rtl && vvp load_gap2.vvp
+
 test-stall3:
 	bash selftest/build.sh test_stall3
 	iverilog -o rtl/stall3.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_stall3.v
@@ -113,6 +118,10 @@ test:
 	bash selftest/build.sh test_stall2
 	iverilog -o rtl/stall2.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_stall2.v
 	cd rtl && vvp stall2.vvp
+
+	bash selftest/build.sh test_load_gap2
+	iverilog -o rtl/load_gap2.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_load_gap2.v
+	cd rtl && vvp load_gap2.vvp
 
 	bash selftest/build.sh test_stall3
 	iverilog -o rtl/stall3.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_stall3.v
