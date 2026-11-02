@@ -173,7 +173,7 @@ module tb_alu;
              errors = errors + 1;
         end
         
-        if (errors == 0) $display("ALL TESTS PASSED");
+        if (errors == 0) $display("ALL TEST PASSED");
         else             $display("%0d FAILURES", errors);
 
         $finish;
