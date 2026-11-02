@@ -43,7 +43,7 @@ test-stall1:
 	iverilog -o rtl/stall1.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_stall1.v
 	cd rtl && vvp stall1.vvp
 
-test-load-gap1:
+test-load_gap1:
 	bash selftest/build.sh test_load_gap1
 	iverilog -o rtl/load_gap1.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_load_gap1.v
 	cd rtl && vvp load_gap1.vvp
@@ -53,7 +53,7 @@ test-stall2:
 	iverilog -o rtl/stall2.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_stall2.v
 	cd rtl && vvp stall2.vvp
 
-test-load-gap2:
+test-load_gap2:
 	bash selftest/build.sh test_load_gap2
 	iverilog -o rtl/load_gap2.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_load_gap2.v
 	cd rtl && vvp load_gap2.vvp
@@ -78,70 +78,9 @@ test-io_loop:
 	iverilog -o rtl/io_loop.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_io_loop.v
 	cd rtl && vvp io_loop.vvp
 
-test:
-	bash selftest/build.sh test_branch
-	iverilog -o rtl/branch.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_branch.v
-	cd rtl && vvp branch.vvp
-
-	bash selftest/build.sh test_alu
-	iverilog -o rtl/alu.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_alu.v
-	cd rtl && vvp alu.vvp
-
-	bash selftest/build.sh test_load_store
-	iverilog -o rtl/load_store.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_load_store.v
-	cd rtl && vvp load_store.vvp
-
-	bash selftest/build.sh test_lui_auipc
-	iverilog -o rtl/lui_auipc.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_lui_auipc.v
-	cd rtl && vvp lui_auipc.vvp
-
-	bash selftest/build.sh test_fence
-	iverilog -o rtl/fence.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_fence.v
-	cd rtl && vvp fence.vvp
-
-	bash selftest/build.sh test_ecall
-	iverilog -o rtl/ecall.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_ecall.v
-	cd rtl && vvp ecall.vvp
-
-	bash selftest/build.sh test_ebreak
-	iverilog -o rtl/ebreak.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_ebreak.v
-	cd rtl && vvp ebreak.vvp
-
-	bash selftest/build.sh test_stall1
-	iverilog -o rtl/stall1.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_stall1.v
-	cd rtl && vvp stall1.vvp
-
-	bash selftest/build.sh test_load_gap1
-	iverilog -o rtl/load_gap1.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_load_gap1.v
-	cd rtl && vvp load_gap1.vvp
+test:	test-alu	test-branch	test-load_store	test-lui_auipc	test-lui	test-fence	test-ecall	test-ebreak	\
+test-stall1	test-load_gap1	test-stall2	test-load_gap2	test-stall3	test-led	test-switch	test-io_loop
 	
-	bash selftest/build.sh test_stall2
-	iverilog -o rtl/stall2.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_stall2.v
-	cd rtl && vvp stall2.vvp
-
-	bash selftest/build.sh test_load_gap2
-	iverilog -o rtl/load_gap2.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_load_gap2.v
-	cd rtl && vvp load_gap2.vvp
-
-	bash selftest/build.sh test_stall3
-	iverilog -o rtl/stall3.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_stall3.v
-	cd rtl && vvp stall3.vvp
-
-	bash selftest/build.sh test_led
-	iverilog -o rtl/led.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_led.v
-	cd rtl && vvp led.vvp
-
-	bash selftest/build.sh test_switch
-	iverilog -o rtl/switch.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_switch.v
-	cd rtl && vvp switch.vvp
-
-	bash selftest/build.sh test_io_loop
-	iverilog -o rtl/io_loop.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_io_loop.v
-	cd rtl && vvp io_loop.vvp
-
-	bash selftest/build.sh test_lui
-	iverilog -o rtl/lui.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_lui.v
-	cd rtl && vvp lui.vvp
 	
 clean:
 	rm -f rtl/*.vvp rtl/*.vcd selftest/*.o selftest/*.elf selftest/*.bin
