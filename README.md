@@ -12,7 +12,7 @@ Fully pipelined RV32I core with forwarding and flushing. Verified in simulation 
 | Pipeline | 5-stage, full forwarding, no load-use stall |
 | Clock | 50 MHz on Arty A7-100T (WNS 4.482 ns) |
 | Hardware | Memory-mapped switches and LEDs; `test_io_loop` validated on board |
-| Tests | 14 simulation tests (`make test`) |
+| Tests | 16 simulation tests (`make test`) |
 | Resources | 1329 (2%) LUTs, 329 (1%) FFs, 556 (3%) LUTRAM |
 
 ## Instructions Implemented
