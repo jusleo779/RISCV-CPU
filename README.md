@@ -126,7 +126,7 @@ rtl/
 selftest/
   *.s                       assembly test programs
   build.sh                  assemble -> hex -> simulate
-Makefile                    make test-<name> targets
+Makefile                    make test and make test-<name>  targets
 constraints/
   Arty-A7-100-Master.xdc    Digilent, reference, unmodified
   riscv-cpu.xdc             project constraints
@@ -136,9 +136,13 @@ constraints/
 
 ```bash
 make test-<name>
+make test
 ```
 
 `build.sh` assembles the matching `.s` file with the RISC-V toolchain, converts to a hex image, compiles the design with Icarus Verilog, and runs the simulation with `vvp`. Each testbench prints `ALL TEST PASSED` or reports the specific register that failed and why.
+
+`make test` will run through each test and will stop at any failing test, exiting with 0 if every test passed and non-zero at the first failure. Each test will have a log saved in `rtl/<name>.log`
+
 
 ## Toolchain
 
@@ -149,7 +153,9 @@ make test-<name>
 
 ## Verification Approach
 
-Each instruction group gets its own testbench and test program. Assertions check specific expected register values, not just "no X-state," using `!==` for comparison. Branch tests include cases where signed and unsigned comparison disagree (e.g. BLT vs BLTU on `-1` and `1`) to confirm the sign-extension logic is doing real work, not passing by coincidence. Three load-use tests placed the loaded registers using different operand positions: I-type `rs1`, S-type `rs2`, S-type `rs1`. I/O test (`test_io_loop`) reads the switches and writes the value to the leds, in a loop. It tests if the value of the switches change by writing two different assertions. 
+Each instruction group gets its own testbench and test program. Each testbench checks specific expected register values with `if` statements, using `!==` for comparison. Branch tests include cases where signed and unsigned comparison disagree (e.g. BLT vs BLTU on `-1` and `1`) to confirm the sign-extension logic is doing real work, not passing by coincidence. Three load-use tests placed the loaded registers using different operand positions: I-type `rs1`, S-type `rs2`, S-type `rs1`. I/O test (`test_io_loop`) reads the switches and writes the value to the leds, in a loop. It tests if the value of the switches change by writing two different checks. Two load-gap tests, for forwarding situations between 1 and 2 instruction gaps. 
+
+The problem with `vvp` is that it outputs an exit code of 0, even when the test fails. The fix was to add `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, where `tee` will save the outputs and output into the log and `grep` checks if the output string is passing. I tested this with `test_stall1`, where I made a failing test without the added `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, revealed an exit code of 0, even though the test failed. But when I added the `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, `make` reported `Error 1`, because grep didn’t find the pass string, and then exited with 2. After checking this, I restored  `test_stall1` to a passing test and found that with the new added check, it outputted 0. Thus, the extra check prevents hidden errors from occurring.
 
 ## Known Bugs Fixed
 
