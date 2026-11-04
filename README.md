@@ -62,7 +62,7 @@ With 3 or more instructions between them, the value is already in the register f
 ### Flushing
 A taken branch or jump occurs after finishing EX, but by that time the IF/ID and ID/EX hold instructions from the wrong path. Both are removed.
 
-## Design Decisions
+## Design Decisions (Simplified)
 
 | Decision | Choice | Why |
 |---|---|---|
@@ -75,6 +75,8 @@ A taken branch or jump occurs after finishing EX, but by that time the IF/ID and
 | Memory Map | Representation on FPGA using result's bit 31 as an identifier for leds (`0x80000000`) and switches(`0x80000004`)  | bit 31 is never set in a real memory address |
 | Clock Rate | targets 50 MHz | The critical path fails when its at 100 MHz with the stall (retest pending) |
 
+
+## Design Decisions (Detailed)
 
 ### FENCE
 FENCE decodes as a NOP. It executes instructions strictly in program order, so no memory reordering exists for FENCE to guard against.

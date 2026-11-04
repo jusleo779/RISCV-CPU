@@ -5,7 +5,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     input wire clk,
     input wire reset,
     input wire [3:0] switches,
-    output reg[3:0] led_reg,
+    output reg [3:0] led_reg,
     output reg halted
 );
 
