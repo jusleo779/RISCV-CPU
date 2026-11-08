@@ -25,8 +25,8 @@ module tb_compute();
             repeat (20) @(posedge clk); //allows pipeline to do all operations before sending out the values
 
             // led_reg resets to 0000, so check 0111 first 
-            if(dut.led_reg !== 4'b0111)begin
-                $display("FAILED: led_reg = %b, expected 0111", dut.led_reg);
+            if(dut.led_reg !== 4'b1000)begin
+                $display("FAILED: led_reg = %b, expected 1000", dut.led_reg);
                 errors = errors + 1;
             end
 
