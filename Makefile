@@ -78,8 +78,16 @@ test-io_loop:
 	iverilog -o rtl/io_loop.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_io_loop.v
 	cd rtl && vvp io_loop.vvp | tee io_loop.log && grep -q "ALL TEST PASSED" io_loop.log
 
+test-compute:
+	bash selftest/build.sh test_compute
+	iverilog -o rtl/compute.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_compute.v
+	cd rtl && vvp compute.vvp | tee compute.log && grep -q "ALL TEST PASSED" compute.log
+
+
+
 test:	test-alu	test-branch	test-load_store	test-lui_auipc	test-lui	test-fence	test-ecall	test-ebreak	\
-test-stall1	test-load_gap1	test-stall2	test-load_gap2	test-stall3	test-led	test-switch	test-io_loop
+		test-stall1	test-load_gap1	test-stall2	test-load_gap2	test-stall3	test-led	test-switch	test-io_loop \
+		test-compute
 	
 	
 clean:

@@ -33,10 +33,10 @@ always@(*)begin
     XOR: result = a ^ b;
 
     SRL_SRA:begin
-        if(alu_op[3]) //based on the func7[5] value 
+        if(alu_op[3]) //based on the func7[5] value (Shift Right Arithmetic )
             result = $signed(a) >>> (b[4:0]);
         else
-            result = a >> (b[4:0]);
+            result = a >> (b[4:0]); // Shift Right logic
     end
 
     OR: result = a | b;

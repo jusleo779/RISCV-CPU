@@ -1,6 +1,6 @@
 `default_nettype none
 module cpu_top#( //use other modules to send specific instructions to provide the output
-    parameter test_file = "test_led.hex"
+    parameter test_file = "test_compute.hex"
 )(
     input wire clk,
     input wire reset,
@@ -28,7 +28,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     reg [6:0] id_ex_opcode;        //saved for memory
     reg [6:0] id_ex_funct7;
     reg [2:0] id_ex_funct3; 
-    reg id_ex_alu_src;
+    reg id_ex_is_rtype;
     reg id_ex_alu_store;
     reg id_ex_alu_AUIPC;
     reg id_ex_use_funct7;
@@ -111,7 +111,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     wire[31:0] data1, data2;
 
     //decides which operations to do if R-type / if alu needs to add or sub, etc.
-    wire alu_src = (opcode == 7'b0110011); 
+    wire is_rtype = (opcode == 7'b0110011); 
 
     //decides if i need to store
     wire alu_store = (opcode == 7'b0100011);
@@ -119,7 +119,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     //if AUIPC called then must use different a variable
     wire alu_AUIPC = (opcode == 7'b0010111);
 
-    wire use_funct7 = alu_src || (opcode == 7'b0010011 && funct3 == 3'b101); //includes the immediate versions of SRL/SRA
+    wire use_funct7 = is_rtype || (opcode == 7'b0010011 && funct3 == 3'b101); //includes the immediate versions of SRL/SRA
 
     //normal operations vs load operations
     wire [2:0] alu_op_lo = (opcode == 7'b0000011 || opcode == 7'b0100011 || alu_AUIPC)? 3'b000 : funct3; //forces to add if its load/store
@@ -189,7 +189,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
 
     alu m2(
         .a((id_ex_alu_AUIPC)? id_ex_pc : fwd_a_ex_mem),
-        .b((id_ex_alu_src)? fwd_b_ex_mem : //dealing with R-type 
+        .b((id_ex_is_rtype)? fwd_b_ex_mem : //dealing with R-type 
            (id_ex_alu_store)? id_ex_imm_s : //if dealing with store force add
            (id_ex_alu_AUIPC)? id_ex_imm_u : id_ex_imm_i), //default: I-type immediate (used by ADDI, JALR, loads)
         .alu_op({id_ex_funct7[5] && id_ex_use_funct7, id_ex_alu_op_lo}),
@@ -207,8 +207,8 @@ module cpu_top#( //use other modules to send specific instructions to provide th
             if(id_ex_opcode == 7'b0100011)begin
                 if(result[31])begin
                     if(!result[2])
-                        led_reg <= fwd_b_ex_mem[3:0];
-                end
+                        led_reg[3:0] <= fwd_b_ex_mem[3:0];  // since I am working with sw with 0 gap in between instructions 
+                end                                         // I must forward the right led pattern 
                 else    
                     dmem[result[11:2]] <= fwd_b_ex_mem;     // store copy for rs2 to memory
             end
@@ -261,7 +261,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//DEBUGGING    
+//DEBUGGING   
     wire is_ebreak = (opcode == 7'b1110011) && (if_id_instr[31:20] == 12'd1);
     wire is_ecall = (opcode == 7'b1110011) && (if_id_instr[31:20] == 12'd0);
 
@@ -323,7 +323,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
             id_ex_opcode <= 7'd0;
             id_ex_funct7 <= 7'd0;
             id_ex_funct3 <= 3'd0;
-            id_ex_alu_src <= 0;
+            id_ex_is_rtype <= 0;
             id_ex_alu_store <= 0;
             id_ex_alu_AUIPC <= 0;
             id_ex_use_funct7 <= 0;
@@ -349,7 +349,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
             id_ex_opcode <= opcode;
             id_ex_funct7 <= funct7;
             id_ex_funct3 <= funct3;
-            id_ex_alu_src <= alu_src;
+            id_ex_is_rtype <= is_rtype;
             id_ex_alu_store <= alu_store;
             id_ex_alu_AUIPC <= alu_AUIPC;
             id_ex_use_funct7 <= use_funct7;
