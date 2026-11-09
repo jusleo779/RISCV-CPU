@@ -48,13 +48,13 @@ Fully pipelined RV32I core with forwarding and flushing. Verified in simulation 
 ## Pipeline
 
 ### Pipelining
-Pipelining is the idea of doing overlapping different operations (IF, ID, EX, MEM, WB) to increase the throughput(instructions/time). The pipeline was separated into 4 different registers (IF/ID, ID/EX, EX/MEM, MEM/WB) but causes hazards. Hazards occur when the execute operation needs a value that hasn't finished all the stages before it is called. This leads to forwarding and flushing.
+Pipelining is the idea of doing overlapping different operations (IF, ID, EX, MEM, WB) to increase the throughput(instructions/time). The pipeline was separated into 4 different registers (IF/ID, ID/EX, EX/MEM, MEM/WB), but this causes hazards. Hazards occur when the execute operation needs a value that hasn't finished all the stages before it is called. This leads to forwarding and flushing.
 
 ### Forwarding
-Forwarding allows the program to send the result from a later stage (MEM or WB) back to a later instruction, before the register file has it. Forwarding is used by every operation that has a situation where they call a value that hasn't finished its operations. There are 3 different cases, where forwarding is required. 
+Forwarding allows the program to send the result from a later stage (MEM or WB) back to a later instruction, before the register file has it. Forwarding is used by every operation that has a situation where it calls a value that hasn't finished its operations. There are 3 different cases where forwarding is required. 
 
-- Case 1:  0 separation between instructions, where EX/MEM stage forwards the `wb_data`
-- Case 2:  1 separation between instructions, where MEM/WB stage forwards the `mem_wb_wb_data`
+- Case 1:  0 separation between instructions, where the EX/MEM stage forwards the `wb_data`
+- Case 2:  1 separation between instructions, where the MEM/WB stage forwards the `mem_wb_wb_data`
 - Case 3:  2 separation between instructions, where the register file passes the value being written (`rd_data`) to read
 
 With 3 or more instructions between them, the value is already in the register file, so no forwarding is needed.
@@ -82,13 +82,13 @@ A taken branch or jump occurs after finishing EX, but by that time the IF/ID and
 FENCE decodes as a NOP. It executes instructions strictly in program order, so no memory reordering exists for FENCE to guard against.
 
 ### ECALL / EBREAK
-ECALL and EBREAK halt happens in hardware instead of trapping. The project scope excludes CSRs and the privileged architecture, so no trap handler exists to jump to. Detection happens in `cpu_top.v`, where its output is held as `halted`. It specifically halts `pc` increments and zeroes `if_id_instr`. We only halt these variables allowing for the draining of the pipelines because `ECALL` requires earlier instructions to complete.
+ECALL and EBREAK halt happens in hardware instead of trapping. The project scope excludes CSRs and the privileged architecture, so no trap handler exists to jump to. Detection happens in `cpu_top.v`, where its output is held as `halted`. It specifically halts `pc` increments and zeroes `if_id_instr`. We only halt these variables, allowing for the draining of the pipelines because `ECALL` requires earlier instructions to complete.
 
 ### Load/Store Timing
 Block RAM (BRAM) reads synchronously, so the data arrives one cycle after the address. If the address is left in MEM, the data would be available in WB, which requires a two-cycle stall. By presenting the address in EX, the data is available in MEM, the same as the old asynchronous design, which is what made it possible to remove the load-use stall.
 
 ### Load-use Stall (removed)
- Previously, an instruction that used a load’s result immediately was stalled for one cycle. The stall was needed because EX/MEM forwarding used `ex_mem_result`, which for a load holds the address (e.g. x1(24) in `test_stall1`), not the data (99). Stalling let the load reach WB, where `mem_wb_wb_data` held the correct value. Forwarding now uses `wb_data`, which selects `dmem_rdata` for loads, so the stall is no longer needed. Each load-use pair saves one cycle (`test_stall1`: 175 → 165 time units), and timing still passes at 50 MHz (WNS: 4.482 ns).
+ Previously, an instruction that used a load’s result immediately was stalled for one cycle. The stall was needed because EX/MEM forwarding used `ex_mem_result`, which for a load holds the address (e.g. x1(24) in `test_stall1`), not the data (99). Stalling let the load reach WB, where `mem_wb_wb_data` holds the correct value. Forwarding now uses `wb_data`, which selects `dmem_rdata` for loads, so the stall is no longer needed. Each load-use pair saves one cycle (`test_stall1`: 175 → 165 time units), and timing still passes at 50 MHz (WNS: 4.482 ns).
 
 ### Register File Initialization
  X does not exist on hardware; an uninitialized FPGA memory comes up holding whatever the synthesis tool assigned. The register file is therefore initialized to a sentinel value `0xDEADBEEF` via an initial block, which Vivado bakes into the memory’s initial contents at configuration time rather than costing runtime logic. Zeros were the alternative, rejected because a register reading 0 is indistinguishable from legitimately computed 0, while the sentinel is obviously wrong on sight. 
@@ -100,10 +100,10 @@ The initial block sits behind `` `ifdef SYNTHESIS ``, so simulation keeps X whil
 `imem` is read combinationally, so it will synthesize as distributed RAM rather than BRAM. Converting it requires the fetch to be registered, which removes the ability to zero `if_id_instr` on a flush that currently relies on it being a normal register. When checking the report, I found that the `imem` uses about 3% of LUTRAM and block RAM has 0 usage. With most of the FPGA's resources unused, converting `imem` to block RAM would free capacity the design has no use for. Worth revisiting if `imem` grows or LUT usage rises.
 
 ### Memory Map
-`switches` and `led_reg` both required a condition when being loaded or stored onto the FPGA. I decided on `led_reg` to be dependent on bit 31 being 1 and bit 2 being 0 (`0x80000000`) from `result` because bit 31 being 1 will never output a legitimate memory address from `result`. Then we use bit 31 and 2 from `result` as the condition for `switches` (`0x80000004`) where they both have to be 1. This allows for the bit peripheral to be adjacent to each other by an offset of 4. When the `led_reg` condition passes it will output the low four bits of the stored word to drive leds, while the `switches` will use the low four bits of a loaded word. 
+`switches` and `led_reg` both required a condition when being loaded or stored onto the FPGA. I decided on `led_reg` to be dependent on bit 31 being 1 and bit 2 being 0 (`0x80000000`) from `result` because bit 31 being 1 will never output a legitimate memory address from `result`. Then we use bit 31 and 2 from `result` as the condition for `switches` (`0x80000004`), where they both have to be 1. This allows for the bit peripherals to be adjacent to each other by an offset of 4. When the `led_reg` condition passes, it will output the low four bits of the stored word to drive LEDs, while the `switches` will use the low four bits of a loaded word. 
 
 ### Clock rate
-The design targets 50 MHz, not the board's 100 MHz. At 100 MHz the critical path fails by 0.364 ns (measured before the load-use stall was removed), running from `ex_mem_reg_write` through the forwarding mux and ALU to the `dmem` address, then through distributed RAM to `dmem_rdata`. Most of that time is the signal travelling between parts of the chip rather than the logic computing anything, so simplifying the logic would not fix it. A divide-by-two in `cpu_fpga_top` produces the 50 MHz clock, buffered onto a global clock network with a `BUFG`. At 50 MHz: 5964 endpoints, 0 failing, 4.482 ns worst slack.
+The design targets 50 MHz, not the board's 100 MHz. At 100 MHz, the critical path fails by 0.364 ns (measured before the load-use stall was removed), running from `ex_mem_reg_write` through the forwarding mux and ALU to the `dmem` address, then through distributed RAM to `dmem_rdata`. Most of that time is the signal travelling between parts of the chip rather than the logic computing anything, so simplifying the logic would not fix it. A divide-by-two in `cpu_fpga_top` produces the 50 MHz clock, buffered onto a global clock network with a `BUFG`. At 50 MHz: 5964 endpoints, 0 failing, 4.482 ns worst slack.
 
 The divided clock has to be declared in the XDC with `create_generated_clock`. Vivado works out clock frequencies on its own for the FPGA's dedicated clock generators, but a clock built from an ordinary toggling register looks like any other signal to it. Without the declaration, every register in the CPU goes unconstrained: timing analysis reported 1 endpoint instead of the ~6000 timed endpoints.
 
@@ -114,7 +114,7 @@ The divided clock has to be declared in the XDC with `create_generated_clock`. V
 
 In `test_lui_auipc`, the ALU output reads X during the EX stage of the instruction. X survives because the sentinel is synthesis only. This is expected, not a bug.
 
-LUI has no rs1 field, bits [19:15], which are a part of the immediate in the format. The decode extracts rs1 unconditionally from every instruction which leads to the bits decoded as x8, which reads a register that no instruction has written. In simulation an unwritten `reg` reads X, so the ALU computes X. This X is harmless: both forwarding and writeback take LUI’s value from `wb_data`, which selects `ex_mem_imm_u` instead of the ALU result.
+LUI has no rs1 field, bits [19:15], which are part of the immediate in the format. The decode extracts rs1 unconditionally from every instruction, which leads to the bits being decoded as x8, which reads a register that no instruction has written. In simulation, an unwritten `reg` reads X, so the ALU computes X. This X is harmless: both forwarding and writeback take LUI’s value from `wb_data`, which selects `ex_mem_imm_u` instead of the ALU result.
 
 ## Structure
 
@@ -141,7 +141,7 @@ make test-<name>
 make test
 ```
 
-`build.sh` assembles the matching `.s` file with the RISC-V toolchain, converts to a hex image, compiles the design with Icarus Verilog, and runs the simulation with `vvp`. Each testbench prints `ALL TEST PASSED` or reports the specific register that failed and why.
+`build.sh` assembles the matching `.s` file with the RISC-V toolchain, converts it to a hex image, compiles the design with Icarus Verilog, and runs the simulation with `vvp`. Each testbench prints `ALL TEST PASSED` or reports the specific register that failed and why.
 
 `make test` will run through each test and will stop at any failing test, exiting with 0 if every test passed and non-zero at the first failure. Each test will have a log saved in `rtl/<name>.log`
 
@@ -155,9 +155,9 @@ make test
 
 ## Verification Approach
 
-Each instruction group gets its own testbench and test program. Each testbench checks specific expected register values with `if` statements, using `!==` for comparison. Branch tests include cases where signed and unsigned comparison disagree (e.g. BLT vs BLTU on `-1` and `1`) to confirm the sign-extension logic is doing real work, not passing by coincidence. Three load-use tests placed the loaded registers using different operand positions: I-type `rs1`, S-type `rs2`, S-type `rs1`. I/O test (`test_io_loop`) reads the switches and writes the value to the leds, in a loop. It tests if the value of the switches change by writing two different checks. Two load-gap tests, for forwarding situations between 1 and 2 instruction gaps. 
+Each instruction group gets its own testbench and test program. Each testbench checks specific expected register values with `if` statements, using `!==` for comparison. Branch tests include cases where signed and unsigned comparison disagree (e.g. BLT vs BLTU on `-1` and `1`) to confirm the sign-extension logic is doing real work, not passing by coincidence. Three load-use tests placed the loaded registers using different operand positions: I-type `rs1`, S-type `rs2`, S-type `rs1`. I/O test (`test_io_loop`) reads the switches and writes the value to the LEDs, in a loop. It tests if the value of the switches changes by writing two different checks. Two load-gap tests, for forwarding situations between 1 and 2 instruction gaps. 
 
-The problem with `vvp` is that it outputs an exit code of 0, even when the test fails. The fix was to add `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, where `tee` will save the outputs and output into the log and `grep` checks if the output string is passing. I tested this with `test_stall1`, where I made a failing test without the added `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, revealed an exit code of 0, even though the test failed. But when I added the `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, `make` reported `Error 1`, because grep didn’t find the pass string, and then exited with 2. After checking this, I restored  `test_stall1` to a passing test and found that with the new added check, it outputted 0. Thus, the extra check prevents hidden errors from occurring.
+The problem with `vvp` is that it outputs an exit code of 0, even when the test fails. The fix was to add `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, where `tee` will save the outputs and output into the log and `grep` checks if the output string is passing. I tested this with `test_stall1`, where I made a failing test without the added `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, which revealed an exit code of 0, even though the test failed. But when I added the `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, `make` reported `Error 1`, because grep didn’t find the pass string and then exited with 2. After checking this, I restored  `test_stall1` to a passing test and found that with the new added check, it outputted 0. Thus, the extra check prevents hidden errors from occurring.
 
 ## Known Bugs Fixed
 
@@ -165,7 +165,7 @@ The problem with `vvp` is that it outputs an exit code of 0, even when the test 
 - `imm_s`: sign-extension was 20 bits instead of 21.
 - ALU control: STORE's opcode wasn't covered in `alu_op_lo`, the same funct3 collision pattern that affected LOAD/SLT.
 - `dmem` indexing mixed `result[11:2]` and raw `result` inconsistently between read and write.
-- During EX stage, I forwarded `ex_mem_result`, the previous instruction's ALU output. For LUI, that ALU output (x8 + I-immediate) is not LUI’s real result. This issue didn't affect the loads and jumps because of the flushing protecting JAL/JALR and stalling protecting load. The fix was to forward `wb_data`, which already had the correct value. I proved that the fix worked by creating `test_lui.s` (`lui x1, 0x12345 -> addi x2, x1, 50`), which originally failed with `x2 = X` and passed with `x2 = 0x12345032`. `wb_data` also selects `dmem_rdata` for loads and `ex_mem_pc + 4` for JAL/JALR, so forwarding is now correct for every instruction type, not just when the stall or flush happens to prevent the problem.
+- During the EX stage, I forwarded `ex_mem_result`, the previous instruction's ALU output. For LUI, that ALU output (x8 + I-immediate) is not LUI’s real result. This issue didn't affect the loads and jumps because of the flushing protecting JAL/JALR and stalling protecting loads. The fix was to forward `wb_data`, which already had the correct value. I proved that the fix worked by creating `test_lui.s` (`lui x1, 0x12345 -> addi x2, x1, 50`), which originally failed with `x2 = X` and passed with `x2 = 0x12345032`. `wb_data` also selects `dmem_rdata` for loads and `ex_mem_pc + 4` for JAL/JALR, so forwarding is now correct for every instruction type, not just when the stall or flush happens to prevent the problem.
 - `alu.v` and `regfile.v` declared ports without an explicit wire. Under  `` `default_nettype none `` this is invalid, but Icarus compiled it anyway; Vivado rejected it. Added wire to every port declaration.
 
 ## Scope
