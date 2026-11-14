@@ -15,7 +15,7 @@ module tb_load_store();
             $finish;
         end
         initial begin 
-            $dumpfile("cpu_top.vcd");
+            $dumpfile("load_store.vcd");
             $dumpvars(0, tb_load_store);
             #10 reset = 0;
 

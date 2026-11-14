@@ -17,7 +17,7 @@ module tb_switch();
             $finish;
         end
         initial begin 
-            $dumpfile("cpu_top.vcd");
+            $dumpfile("switch.vcd");
             $dumpvars(0, tb_switch);
             #10 reset = 0;
 

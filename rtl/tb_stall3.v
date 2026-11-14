@@ -15,7 +15,7 @@ module tb_stall3();
             $finish;
         end
         initial begin 
-            $dumpfile("cpu_top.vcd");
+            $dumpfile("stall3.vcd");
             $dumpvars(0, tb_stall3);
             #10 reset = 0;
 

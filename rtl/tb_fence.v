@@ -16,7 +16,7 @@ module tb_fence();
         end
 
         initial begin 
-            $dumpfile("cpu_top.vcd");
+            $dumpfile("fence.vcd");
             $dumpvars(0, tb_fence);
             #10 reset = 0;
 

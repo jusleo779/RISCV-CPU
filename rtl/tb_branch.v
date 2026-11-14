@@ -18,7 +18,7 @@ module tb_branch;
     end
 
     initial begin
-        $dumpfile("cpu_top.vcd");
+        $dumpfile("branch.vcd");
         $dumpvars(0, tb_branch);
         #10 reset = 0;
 

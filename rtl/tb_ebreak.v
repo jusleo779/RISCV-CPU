@@ -17,7 +17,7 @@ module tb_ebreak();
         end
 
         initial begin 
-            $dumpfile("cpu_top.vcd");
+            $dumpfile("ebreak.vcd");
             $dumpvars(0, tb_ebreak);
             #10 reset = 0;
 

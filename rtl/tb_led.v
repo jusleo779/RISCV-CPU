@@ -16,7 +16,7 @@ module tb_led();
             $finish;
         end
         initial begin 
-            $dumpfile("cpu_top.vcd");
+            $dumpfile("led.vcd");
             $dumpvars(0, tb_led);
             #10 reset = 0;
 

@@ -16,7 +16,7 @@ module tb_load_gap1();
         end
         
         initial begin 
-            $dumpfile("cpu_top.vcd");
+            $dumpfile("load_gap1.vcd");
             $dumpvars(0, tb_load_gap1);
             #10 reset = 0;
 

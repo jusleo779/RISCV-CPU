@@ -15,7 +15,7 @@ module tb_lui();
             $finish;
         end
         initial begin
-            $dumpfile("cpu_top.vcd");
+            $dumpfile("lui.vcd");
             $dumpvars(0, tb_lui);
             #10 reset = 0;
  

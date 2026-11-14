@@ -17,7 +17,7 @@ module tb_ecall();
         end
 
         initial begin 
-            $dumpfile("cpu_top.vcd");
+            $dumpfile("ecall.vcd");
             $dumpvars(0, tb_ecall);
             #10 reset = 0;
 

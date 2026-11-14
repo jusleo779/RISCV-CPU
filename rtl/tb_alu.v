@@ -17,7 +17,7 @@ module tb_alu;
     end
 
     initial begin
-        $dumpfile("cpu_top.vcd");
+        $dumpfile("alu.vcd");
         $dumpvars(0, tb_alu);
         #10 reset = 0;
 

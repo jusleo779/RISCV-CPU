@@ -17,7 +17,7 @@ module tb_io_loop();
             $finish;
         end
         initial begin 
-            $dumpfile("cpu_top.vcd");
+            $dumpfile("io_loop.vcd");
             $dumpvars(0, tb_io_loop);
             #10 reset = 0;
 

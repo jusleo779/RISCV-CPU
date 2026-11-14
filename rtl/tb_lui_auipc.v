@@ -15,7 +15,7 @@ module tb_lui_auipc();
             $finish;
         end
         initial begin 
-            $dumpfile("cpu_top.vcd");
+            $dumpfile("lui_auipc.vcd");
             $dumpvars(0, tb_lui_auipc);
             #10 reset = 0;
 
