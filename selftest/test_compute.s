@@ -9,7 +9,7 @@ loop:
     srli x5, x3, 29         # fill with 0s: x5 = 7 if d < 0, 0 otherwise (low 4 bits 0111 / 0000)
     slt  x6, x4, x5         # x6 = 1 if x4 < x5 (signed). Catches SRAI/SRLI swapped
     add  x6, x6, x5         # ADD, not OR: OR hid SRA-as-SRL (break experiment). x6 = 8 if d < 0, 0 otherwise
-    blt  x3, x0, neg        # taken if d < 0. Must be SIGNED: bltu x3, x0 is never taken (nothing is unsigned-less-than 0)
+    blt  x3, x0, neg        # taken if d < 0 (signed; bltu x3, x0 would never be taken)
     add  x6, x6, x3         # not taken: x6 = 0 + d = 0..7 (sw 1000 -> 0000 ... sw 1111 -> 0111)
     j    done               # ...then jump OVER the taken code
 

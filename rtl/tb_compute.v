@@ -17,28 +17,37 @@ module tb_compute();
             $finish;
         end
         initial begin 
-            $dumpfile("cpu_top.vcd");
+            $dumpfile("compute.vcd");
             $dumpvars(0, tb_compute);
             #10 reset = 0;
 
-           
-            repeat (20) @(posedge clk); //allows pipeline to do all operations before sending out the values
+            // led_reg resets to 0000, so a CPU that never executes sw would pass any 0000 check.
+            // Both expected values here (1100, 0100) are nonzero, so a dead CPU fails BOTH checks;
+            // check order doesn't matter (unlike v1, where the nonzero check had to come first).
+            
+            repeat (30) @(posedge clk); // from reset: lui (slot 0), lw (1), sw fetched at slot 13, writes led_reg in MEM ≈ cycle 17. 30 = safe margin
+                                        
 
-            // led_reg resets to 0000, so check 0111 first 
-            if(dut.led_reg !== 4'b1000)begin
-                $display("FAILED: led_reg = %b, expected 1000", dut.led_reg);
+            //input was 0011 the leds should output 1100 for -5
+            if(dut.led_reg !== 4'b1100)begin 
+                $display("FAILED: led_reg = %b, expected 1100", dut.led_reg);
                 errors = errors + 1;
             end
 
             // change the switches mid-run; the loop must pick it up
             switches = 4'b1100;
-            repeat (20) @(posedge clk); //20 is enough cycles because worst case is 18 cycles
+            repeat (30) @(posedge clk); //30 is enough cycles because worst case is 28 cycles
+                                        //16 (one fully cycle through all instrcutions) + 12 (lw→sw)
 
-            if(dut.led_reg !== 4'b0000)begin
-                $display("FAILED: led_reg = %b, expected 0000 after switch change", dut.led_reg);
+            // input 1100 and the leds output should 0100
+            if(dut.led_reg !== 4'b0100)begin
+                $display("FAILED: led_reg = %b, expected 0100 after switch change", dut.led_reg);
                 errors = errors + 1;
             end
             
+
+            
+
 
             if(errors == 0) $display("ALL TEST PASSED");
             else            $display("%0d FAILURES", errors);
