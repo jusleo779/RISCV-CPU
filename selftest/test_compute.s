@@ -4,22 +4,21 @@ _start:
 loop:
     lw   x2, 4(x1)          # x2 = switches
     andi x2, x2, 15         # keep the current 4 bits
-    addi x3, x2, -8         # d = s - 8, range -8 to 7 (half numbers negative & half are positive)
-    srai x4, x3, 29         # fills with copy of bit 31 (1 if d < 0, 0 otherwise). (should be 0000(+) and 1111(-))
-    srli x5, x3, 29         # shifts the current bits by 29 bits where the 4th bit is filled 0 (for +/-)(0000(+) or 0111(-))
-    slt x6, x4, x5          # compares if x4 is less than x5 (catches if the operations are swapped)
-    add x6, x6, x5          # ADD, not OR: OR hid SRA-as-SRL (break experiment). Also catches wrong SRLI value
-    blt  x3, x0, neg        # compares if it is taken it will go to neg and do the operations
-    add  x6, x6, x3         # not taken runs this (led values 0000 --> 0111 where inputs 1000 = 0 and 1111 = 7)
+    addi x3, x2, -8         # d = s - 8, range -8 to 7 (half negative, half positive)
+    srai x4, x3, 29         # fill with copies of bit 31: x4 = 0xFFFFFFFF if d < 0, 0 otherwise (low 4 bits 1111 / 0000)
+    srli x5, x3, 29         # fill with 0s: x5 = 7 if d < 0, 0 otherwise (low 4 bits 0111 / 0000)
+    slt  x6, x4, x5         # x6 = 1 if x4 < x5 (signed). Catches SRAI/SRLI swapped
+    add  x6, x6, x5         # ADD, not OR: OR hid SRA-as-SRL (break experiment). x6 = 8 if d < 0, 0 otherwise
+    blt  x3, x0, neg        # taken if d < 0. Must be SIGNED: bltu x3, x0 is never taken (nothing is unsigned-less-than 0)
+    add  x6, x6, x3         # not taken: x6 = 0 + d = 0..7 (sw 1000 -> 0000 ... sw 1111 -> 0111)
+    j    done               # ...then jump OVER the taken code
 
-    j done                  # ...then jumps OVER the taken code
-
-neg: # saying from the led values 1000 --> 1111 is -1 = 1000 and -8 = 1111, where inputs are 0000 = -8 to 0111 = -1
-    sub x6, x6, x3       # only the taken path runs these two (8 - (-#))
-    addi x6, x6, -1      # prevents overlap of 0000 for the not taken and taken because the value 8 was never used
-                         # in the leds which is why we are able to subtract
+neg:                        # taken path: sw 0000 (d = -8) -> 1111 ... sw 0111 (d = -1) -> 1000
+    sub  x6, x6, x3         # x6 = 8 - d = 9..16 (subtracting a negative adds)
+    addi x6, x6, -1         # shift 9..16 down to 8..15. Without it, d = -8 gives 16 = 0x10: bit 4 can't show
+                            # on 4 LEDs, so it reads 0000 and collides with sw 1000. 8..15 is free because
+                            # the not-taken path only produces 0..7
 
 done:
-    sw x6, 0(x1)
-    j  loop               # read the switches again
-
+    sw   x6, 0(x1)          # LEDs = x6[3:0]
+    j    loop               # read the switches again
