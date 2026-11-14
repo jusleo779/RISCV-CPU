@@ -10,10 +10,10 @@ Fully pipelined RV32I core with forwarding and flushing. Verified in simulation 
 |---|---|
 | ISA | RV32I, 40 instructions |
 | Pipeline | 5-stage, full forwarding, no load-use stall |
-| Clock | 50 MHz on Arty A7-100T (WNS 4.482 ns) |
+| Clock | 50 MHz on Arty A7-100T (WNS 4.313 ns) |
 | Hardware | Memory-mapped switches and LEDs; `test_io_loop` validated on board |
 | Tests | 16 simulation tests (`make test`) |
-| Resources | 1329 (2%) LUTs, 329 (1%) FFs, 556 (3%) LUTRAM |
+| Resources | 1600 (3%) LUTs, 386 (1%) FFs, 556 (3%) LUTRAM |
 
 ## Instructions Implemented
 
@@ -88,7 +88,7 @@ ECALL and EBREAK halt happens in hardware instead of trapping. The project scope
 Block RAM (BRAM) reads synchronously, so the data arrives one cycle after the address. If the address is left in MEM, the data would be available in WB, which requires a two-cycle stall. By presenting the address in EX, the data is available in MEM, the same as the old asynchronous design, which is what made it possible to remove the load-use stall.
 
 ### Load-use Stall (removed)
- Previously, an instruction that used a load’s result immediately was stalled for one cycle. The stall was needed because EX/MEM forwarding used `ex_mem_result`, which for a load holds the address (e.g. x1(24) in `test_stall1`), not the data (99). Stalling let the load reach WB, where `mem_wb_wb_data` holds the correct value. Forwarding now uses `wb_data`, which selects `dmem_rdata` for loads, so the stall is no longer needed. Each load-use pair saves one cycle (`test_stall1`: 175 → 165 time units), and timing still passes at 50 MHz (WNS: 4.482 ns).
+ Previously, an instruction that used a load’s result immediately was stalled for one cycle. The stall was needed because EX/MEM forwarding used `ex_mem_result`, which for a load holds the address (e.g. x1(24) in `test_stall1`), not the data (99). Stalling let the load reach WB, where `mem_wb_wb_data` holds the correct value. Forwarding now uses `wb_data`, which selects `dmem_rdata` for loads, so the stall is no longer needed. Each load-use pair saves one cycle (`test_stall1`: 175 → 165 time units), and timing still passes at 50 MHz (WNS: 4.313 ns).
 
 ### Register File Initialization
  X does not exist on hardware; an uninitialized FPGA memory comes up holding whatever the synthesis tool assigned. The register file is therefore initialized to a sentinel value `0xDEADBEEF` via an initial block, which Vivado bakes into the memory’s initial contents at configuration time rather than costing runtime logic. Zeros were the alternative, rejected because a register reading 0 is indistinguishable from legitimately computed 0, while the sentinel is obviously wrong on sight. 
@@ -103,9 +103,11 @@ The initial block sits behind `` `ifdef SYNTHESIS ``, so simulation keeps X whil
 `switches` and `led_reg` both required a condition when being loaded or stored onto the FPGA. I decided on `led_reg` to be dependent on bit 31 being 1 and bit 2 being 0 (`0x80000000`) from `result` because bit 31 being 1 will never output a legitimate memory address from `result`. Then we use bit 31 and 2 from `result` as the condition for `switches` (`0x80000004`), where they both have to be 1. This allows for the bit peripherals to be adjacent to each other by an offset of 4. When the `led_reg` condition passes, it will output the low four bits of the stored word to drive LEDs, while the `switches` will use the low four bits of a loaded word. 
 
 ### Clock rate
-The design targets 50 MHz, not the board's 100 MHz. At 100 MHz, the critical path fails by 0.364 ns (measured before the load-use stall was removed), running from `ex_mem_reg_write` through the forwarding mux and ALU to the `dmem` address, then through distributed RAM to `dmem_rdata`. Most of that time is the signal travelling between parts of the chip rather than the logic computing anything, so simplifying the logic would not fix it. A divide-by-two in `cpu_fpga_top` produces the 50 MHz clock, buffered onto a global clock network with a `BUFG`. At 50 MHz: 5964 endpoints, 0 failing, 4.482 ns worst slack.
+The design targets 50 MHz, not the board's 100 MHz. At 100 MHz, the critical path fails by 0.364 ns (measured before the load-use stall was removed), running from `ex_mem_reg_write` through the forwarding mux and ALU to the `dmem` address, then through distributed RAM to `dmem_rdata`. Most of that time is the signal travelling between parts of the chip rather than the logic computing anything, so simplifying the logic would not fix it. A divide-by-two in `cpu_fpga_top` produces the 50 MHz clock, buffered onto a global clock network with a `BUFG`. At 50 MHz: 6266 endpoints, 0 failing, 4.313 ns worst slack.
 
 The divided clock has to be declared in the XDC with `create_generated_clock`. Vivado works out clock frequencies on its own for the FPGA's dedicated clock generators, but a clock built from an ordinary toggling register looks like any other signal to it. Without the declaration, every register in the CPU goes unconstrained: timing analysis reported 1 endpoint instead of the ~6000 timed endpoints.
+
+Timing and utilization are measured with `test_compute.hex` loaded. Because `imem` is a ROM, Vivado optimizes away logic the loaded program never uses, so numbers are only comparable between builds using the same program.
 
 
 
@@ -159,6 +161,9 @@ Each instruction group gets its own testbench and test program. Each testbench c
 
 The problem with `vvp` is that it outputs an exit code of 0, even when the test fails. The fix was to add `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, where `tee` will save the outputs and output into the log and `grep` checks if the output string is passing. I tested this with `test_stall1`, where I made a failing test without the added `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, which revealed an exit code of 0, even though the test failed. But when I added the `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, `make` reported `Error 1`, because grep didn’t find the pass string and then exited with 2. After checking this, I restored  `test_stall1` to a passing test and found that with the new added check, it outputted 0. Thus, the extra check prevents hidden errors from occurring.
 
+**Fault injection**. A test that has never failed proves nothing, so each new test is checked by breaking one path in the RTL, confirming the test fails with the predicted value, and restoring it with `git checkout`. This found two gaps: the first one-gap load test exercised only forwarding operand A (fixed by using `add x5, x4, x4`), and `test_compute` v1 combined SLT and SRLI results with OR, which hid an SRA-acting-as-SRL bug (fixed by switching to ADD). In `test_compute` v2, SRA-as-SRL gives LEDs 1011 instead of 1100, and BLT-as-BLTU gives 0011.
+
+
 ## Known Bugs Fixed
 
 - `regfile.v`: x0 write guard existed on the read path but not the write path, so writes to x0 silently succeeded.
@@ -174,7 +179,11 @@ RV32I base integer instruction set, 40 instructions (with EBREAK/ECALL-as-halted
 
 ## Future Project Extension
 
-Hardware validation so far covers a single program that reads the switches and writes their value to the LEDs. Branches, jumps, and arithmetic are verified in simulation but have not been exercised on the board. The next useful step is a program whose output depends on computation rather than data movement.
+Hardware validation covers `test_io_loop` (switches → LEDs) and test_compute, where shifts, a signed compare, and a signed branch determine the LED output; all 16 switch settings were checked against a hand-derived chart.
 
-Also open:
-- `imem` conversion to block RAM, deferred while FPGA resource usage stays low
+Still open:
+
+- Compliance testing with riscv-arch-test
+- 100 MHz retest of the current design (with `test_compute.hex`, so it’s comparable)
+- `imem` conversion to block RAM, deferred while resource usage stays low
+
