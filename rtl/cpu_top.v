@@ -47,7 +47,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     reg[31:0] ex_mem_data2;
     reg[4:0] ex_mem_rd;
     reg[31:0] ex_mem_imm_u;
-    reg [31:0] ex_mem_pc;
+    reg [31:0] ex_mem_pc_plus4;
 
     // Memory / Write Back
     reg[31:0] mem_wb_wb_data;
@@ -61,7 +61,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
 //Instruction Fetch Stage
 
     // Program Counter
-    reg [31:0] pc = 32'b0; //holds address of current instruction
+    reg [31:0] pc = 32'b0; // holds address of current instruction in imem
 
 
     // Instruction memory: word-addressed, 32-bit wide
@@ -88,10 +88,10 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     // Decode stub — pull out fields, don't act on them yet
     // set bit locations by architecture (R-Type)
     wire [6:0] opcode = if_id_instr[6:0];
-    wire [4:0] rd     = if_id_instr[11:7];
+    wire [4:0] rd     = if_id_instr[11:7];  // register number
     wire [2:0] funct3 = if_id_instr[14:12];
-    wire [4:0] rs1    = if_id_instr[19:15];
-    wire [4:0] rs2    = if_id_instr[24:20];
+    wire [4:0] rs1    = if_id_instr[19:15]; // register number
+    wire [4:0] rs2    = if_id_instr[24:20]; // register number
     wire [6:0] funct7 = if_id_instr[31:25];
 
     //Immediate values
@@ -145,12 +145,12 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     //Branch Operations Mux
     reg comparsion;
     //funct3 dependent outputs
-    parameter BEQ = 3'b000;
-    parameter BNE = 3'b001;
-    parameter BLT = 3'b100; 
-    parameter BGE = 3'b101;
-    parameter BLTU = 3'b110;
-    parameter BGEU = 3'b111;
+    localparam BEQ = 3'b000;
+    localparam BNE = 3'b001;
+    localparam BLT = 3'b100; 
+    localparam BGE = 3'b101;
+    localparam BLTU = 3'b110;
+    localparam BGEU = 3'b111;
     //comparsion output dependent on funct3
     always@(*)begin
         case(id_ex_funct3)
@@ -204,6 +204,16 @@ module cpu_top#( //use other modules to send specific instructions to provide th
             dmem_rdata <= 32'd0;
         end
         else begin
+            //Load
+            if(id_ex_opcode == 7'b0000011)begin
+                if(result[31])begin
+                    if(result[2])
+                        dmem_rdata <= {{28{1'b0}}, switches[3:0]};
+                end
+                else    
+                    dmem_rdata <= dmem[result[11:2]];        // data memory Load
+            end
+            //Store
             if(id_ex_opcode == 7'b0100011)begin
                 if(result[31])begin
                     if(!result[2])
@@ -211,14 +221,6 @@ module cpu_top#( //use other modules to send specific instructions to provide th
                 end                                         // I must forward the right led pattern 
                 else    
                     dmem[result[11:2]] <= fwd_b_ex_mem;     // store copy for rs2 to memory
-            end
-            if(id_ex_opcode == 7'b0000011)begin
-                if(result[31])begin
-                    if(result[2])
-                        dmem_rdata <= {{28{1'b0}}, switches[3:0]};
-                end
-                else    
-                    dmem_rdata <= dmem[result[11:2]];        // data memory load
             end
         end
     end
@@ -228,7 +230,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //Memory Stage
 
-    assign wb_data = (ex_mem_opcode == 7'b1101111 || ex_mem_opcode == 7'b1100111)? (ex_mem_pc + 4) : // JAL / JALR 
+    assign wb_data = (ex_mem_opcode == 7'b1101111 || ex_mem_opcode == 7'b1100111)? ex_mem_pc_plus4 : // JAL / JALR 
                      (ex_mem_opcode == 7'b0000011)? dmem_rdata : //bypasses alu since it's unneccessary
                      (ex_mem_opcode == 7'b0110111)? ex_mem_imm_u : ex_mem_result; //LUI bypasses alu also
     
@@ -370,7 +372,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
             ex_mem_data2 <= 32'd0;
             ex_mem_rd <= 5'd0;
             ex_mem_imm_u <= 32'd0;
-            ex_mem_pc <= 32'd0;
+            ex_mem_pc_plus4 <= 32'd0;
             ex_mem_opcode <= 7'd0;
         end
         else begin
@@ -379,8 +381,8 @@ module cpu_top#( //use other modules to send specific instructions to provide th
             ex_mem_data2 <= fwd_b_ex_mem;
             ex_mem_rd <= id_ex_rd;
             ex_mem_imm_u <= id_ex_imm_u;
-            ex_mem_pc <= id_ex_pc;
             ex_mem_opcode <= id_ex_opcode;
+            ex_mem_pc_plus4 <= id_ex_pc + 4;
         end
     end
 
