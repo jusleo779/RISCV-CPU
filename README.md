@@ -1,6 +1,6 @@
 # RISC-V RV32I Pipelined CPU
 
-A pipelined RV32I core written in Verilog, verified in simulation.
+A pipelined RV32I core written in Verilog, verified in simulation and on an Artix-7 FPGA.
 
 ## Status
 
@@ -11,9 +11,9 @@ Fully pipelined RV32I core with forwarding and flushing. Verified in simulation 
 | ISA | RV32I, 40 instructions |
 | Pipeline | 5-stage, full forwarding, no load-use stall |
 | Clock | 50 MHz on Arty A7-100T (WNS 4.313 ns) |
-| Hardware | Memory-mapped switches and LEDs; `test_io_loop` validated on board |
-| Tests | 16 simulation tests (`make test`) |
-| Resources | 1600 (3%) LUTs, 386 (1%) FFs, 556 (3%) LUTRAM |
+| Hardware | Memory-mapped switches and LEDs; `test_compute` validated on board (all 16 switch settings) |
+| Tests | 17 simulation tests (`make test`) |
+| Resources | 1600 (3%) LUTs, 386 (<1%) FFs, 556 (3%) LUTRAM |
 
 ## Instructions Implemented
 
@@ -103,7 +103,7 @@ The initial block sits behind `` `ifdef SYNTHESIS ``, so simulation keeps X whil
 `switches` and `led_reg` both required a condition when being loaded or stored onto the FPGA. I decided on `led_reg` to be dependent on bit 31 being 1 and bit 2 being 0 (`0x80000000`) from `result` because bit 31 being 1 will never output a legitimate memory address from `result`. Then we use bit 31 and 2 from `result` as the condition for `switches` (`0x80000004`), where they both have to be 1. This allows for the bit peripherals to be adjacent to each other by an offset of 4. When the `led_reg` condition passes, it will output the low four bits of the stored word to drive LEDs, while the `switches` will use the low four bits of a loaded word. 
 
 ### Clock rate
-The design targets 50 MHz, not the board's 100 MHz. At 100 MHz, the critical path fails by 0.364 ns (measured before the load-use stall was removed), running from `ex_mem_reg_write` through the forwarding mux and ALU to the `dmem` address, then through distributed RAM to `dmem_rdata`. Most of that time is the signal travelling between parts of the chip rather than the logic computing anything, so simplifying the logic would not fix it. A divide-by-two in `cpu_fpga_top` produces the 50 MHz clock, buffered onto a global clock network with a `BUFG`. At 50 MHz: 6266 endpoints, 0 failing, 4.313 ns worst slack.
+The design targets 50 MHz, not the board's 100 MHz. At 100 MHz, the critical path fails by 0.364 ns (measured before the load-use stall was removed), running from `ex_mem_reg_write` through the forwarding mux and ALU to the `dmem` address, then through distributed RAM to `dmem_rdata`. Most of that time is the signal travelling between parts of the chip rather than the logic computing anything, so simplifying the logic would not fix it. A divide-by-two in `cpu_fpga_top` produces the 50 MHz clock, buffered onto a global clock network with a `BUFG`. At 50 MHz: 6265 endpoints, 0 failing, 4.313 ns worst slack.
 
 The divided clock has to be declared in the XDC with `create_generated_clock`. Vivado works out clock frequencies on its own for the FPGA's dedicated clock generators, but a clock built from an ordinary toggling register looks like any other signal to it. Without the declaration, every register in the CPU goes unconstrained: timing analysis reported 1 endpoint instead of the ~6000 timed endpoints.
 
@@ -159,7 +159,7 @@ make test
 
 Each instruction group gets its own testbench and test program. Each testbench checks specific expected register values with `if` statements, using `!==` for comparison. Branch tests include cases where signed and unsigned comparison disagree (e.g. BLT vs BLTU on `-1` and `1`) to confirm the sign-extension logic is doing real work, not passing by coincidence. Three load-use tests placed the loaded registers using different operand positions: I-type `rs1`, S-type `rs2`, S-type `rs1`. I/O test (`test_io_loop`) reads the switches and writes the value to the LEDs, in a loop. It tests if the value of the switches changes by writing two different checks. Two load-gap tests, for forwarding situations between 1 and 2 instruction gaps. 
 
-The problem with `vvp` is that it outputs an exit code of 0, even when the test fails. The fix was to add `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, where `tee` will save the outputs and output into the log and `grep` checks if the output string is passing. I tested this with `test_stall1`, where I made a failing test without the added `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, which revealed an exit code of 0, even though the test failed. But when I added the `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, `make` reported `Error 1`, because grep didn’t find the pass string and then exited with 2. After checking this, I restored  `test_stall1` to a passing test and found that with the new added check, it outputted 0. Thus, the extra check prevents hidden errors from occurring.
+The problem with `vvp` is that it outputs an exit code of 0, even when the test fails. The fix was to add `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, where `tee` will save the outputs and output into the log and `grep` checks if the output string is passing. I tested this with `test_stall1`, where I made a failing test without the added `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, which revealed an exit code of 0, even though the test failed. But when I added the `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, `grep` exits with 1, while `make` exits with 2. After checking this, I restored  `test_stall1` to a passing test and found that with the new added check, it outputted 0. Thus, the extra check prevents hidden errors from occurring.
 
 **Fault injection**. A test that has never failed proves nothing, so each new test is checked by breaking one path in the RTL, confirming the test fails with the predicted value, and restoring it with `git checkout`. This found two gaps: the first one-gap load test exercised only forwarding operand A (fixed by using `add x5, x4, x4`), and `test_compute` v1 combined SLT and SRLI results with OR, which hid an SRA-acting-as-SRL bug (fixed by switching to ADD). In `test_compute` v2, SRA-as-SRL gives LEDs 1011 instead of 1100, and BLT-as-BLTU gives 0011.
 
@@ -179,7 +179,7 @@ RV32I base integer instruction set, 40 instructions (with EBREAK/ECALL-as-halted
 
 ## Future Project Extension
 
-Hardware validation covers `test_io_loop` (switches → LEDs) and test_compute, where shifts, a signed compare, and a signed branch determine the LED output; all 16 switch settings were checked against a hand-derived chart.
+Hardware validation covers `test_io_loop` (switches → LEDs) and `test_compute`, where shifts, a signed compare, and a signed branch determine the LED output; all 16 switch settings were checked against a hand-derived chart.
 
 Still open:
 
