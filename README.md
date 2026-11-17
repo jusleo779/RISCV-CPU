@@ -10,10 +10,10 @@ Fully pipelined RV32I core with forwarding and flushing. Verified in simulation 
 |---|---|
 | ISA | RV32I, 40 instructions |
 | Pipeline | 5-stage, full forwarding, no load-use stall |
-| Clock | 50 MHz on Arty A7-100T (WNS 4.313 ns) |
+| Clock | 50 MHz on Arty A7-100T (WNS 3.795 ns) |
 | Hardware | Memory-mapped switches and LEDs; `test_compute` validated on board (all 16 switch settings) |
 | Tests | 17 simulation tests (`make test`) |
-| Resources | 1600 (3%) LUTs, 386 (<1%) FFs, 556 (3%) LUTRAM |
+| Resources | 1565 (2.5%) LUTs, 386 (<1%) FFs, 556 (3%) LUTRAM |
 
 ## Instructions Implemented
 
@@ -73,9 +73,10 @@ A taken branch or jump occurs after finishing EX, but by that time the IF/ID and
 | Register File Initialization| Sentinel value `0xDEADBEEF` | A stray `0` looks like a real result; the sentinel is obviously wrong |
 | Imem Read Timing | kept the LUT RAM usage instead of BRAM  | BRAM needs a registered fetch, which breaks flush-zeroing; LUTRAM use is only ~3% |
 | Memory Map | Representation on FPGA using result's bit 31 as an identifier for leds (`0x80000000`) and switches(`0x80000004`)  | bit 31 is never set in a real memory address |
-| Clock Rate | targets 50 MHz | The critical path fails when its at 100 MHz with the stall (retest pending) |
+| Clock Rate | targets 50 MHz | The critical path fails when its at 100 MHz |
+| `PC + 4` Retiming | moved `PC + 4` from MEM to EX | Shortened 100 MHz critical path by +0.41 ns |
 
-
+ 
 ## Design Decisions (Detailed)
 
 ### FENCE
@@ -88,7 +89,7 @@ ECALL and EBREAK halt happens in hardware instead of trapping. The project scope
 Block RAM (BRAM) reads synchronously, so the data arrives one cycle after the address. If the address is left in MEM, the data would be available in WB, which requires a two-cycle stall. By presenting the address in EX, the data is available in MEM, the same as the old asynchronous design, which is what made it possible to remove the load-use stall.
 
 ### Load-use Stall (removed)
- Previously, an instruction that used a load’s result immediately was stalled for one cycle. The stall was needed because EX/MEM forwarding used `ex_mem_result`, which for a load holds the address (e.g. x1(24) in `test_stall1`), not the data (99). Stalling let the load reach WB, where `mem_wb_wb_data` holds the correct value. Forwarding now uses `wb_data`, which selects `dmem_rdata` for loads, so the stall is no longer needed. Each load-use pair saves one cycle (`test_stall1`: 175 → 165 time units), and timing still passes at 50 MHz (WNS: 4.313 ns).
+ Previously, an instruction that used a load’s result immediately was stalled for one cycle. The stall was needed because EX/MEM forwarding used `ex_mem_result`, which for a load holds the address (e.g. x1(24) in `test_stall1`), not the data (99). Stalling let the load reach WB, where `mem_wb_wb_data` holds the correct value. Forwarding now uses `wb_data`, which selects `dmem_rdata` for loads, so the stall is no longer needed. Each load-use pair saves one cycle (`test_stall1`: 175 → 165 time units), and timing still passes at 50 MHz (WNS: 3.795 ns).
 
 ### Register File Initialization
  X does not exist on hardware; an uninitialized FPGA memory comes up holding whatever the synthesis tool assigned. The register file is therefore initialized to a sentinel value `0xDEADBEEF` via an initial block, which Vivado bakes into the memory’s initial contents at configuration time rather than costing runtime logic. Zeros were the alternative, rejected because a register reading 0 is indistinguishable from legitimately computed 0, while the sentinel is obviously wrong on sight. 
@@ -102,13 +103,26 @@ The initial block sits behind `` `ifdef SYNTHESIS ``, so simulation keeps X whil
 ### Memory Map
 `switches` and `led_reg` both required a condition when being loaded or stored onto the FPGA. I decided on `led_reg` to be dependent on bit 31 being 1 and bit 2 being 0 (`0x80000000`) from `result` because bit 31 being 1 will never output a legitimate memory address from `result`. Then we use bit 31 and 2 from `result` as the condition for `switches` (`0x80000004`), where they both have to be 1. This allows for the bit peripherals to be adjacent to each other by an offset of 4. When the `led_reg` condition passes, it will output the low four bits of the stored word to drive LEDs, while the `switches` will use the low four bits of a loaded word. 
 
+
 ### Clock rate
-The design targets 50 MHz, not the board's 100 MHz. At 100 MHz, the critical path fails by 0.364 ns (measured before the load-use stall was removed), running from `ex_mem_reg_write` through the forwarding mux and ALU to the `dmem` address, then through distributed RAM to `dmem_rdata`. Most of that time is the signal travelling between parts of the chip rather than the logic computing anything, so simplifying the logic would not fix it. A divide-by-two in `cpu_fpga_top` produces the 50 MHz clock, buffered onto a global clock network with a `BUFG`. At 50 MHz: 6265 endpoints, 0 failing, 4.313 ns worst slack.
+The design targets 50 MHz, not the board's 100 MHz. At 100 MHz, the critical path fails by 2.358 ns, running from `ex_mem_rd` -> `ex_mem_matches_rs1` compare -> forwarding mux (`fwd_a`) -> ALU -> dmem address (`result[11:2]`) -> distributed RAM read -> `dmem_rdata`. About 79% of that delay is routing (signals travelling between parts of the chip) rather than logic.
+
+The limit is structural. Because the dmem address is presented in EX and the load-use stall was removed, forwarding, the ALU, and the memory read all happen in a single cycle. Reaching 100 MHz would mean splitting that chain with a register, which delays load data by a cycle and brings back a load-use stall. That is a trade-off between clock speed and cycles per instruction, so I kept 50 MHz and the one-cycle-faster load-use path. (Before the stall was removed, 100 MHz failed by only 0.364 ns; the stall removal is what turned a near miss into a structural limit.)
+
+A divide-by-two in `cpu_fpga_top` produces the 50 MHz clock, buffered onto a global clock network with a `BUFG`. At 50 MHz: 6265 endpoints, 0 failing, 3.795 ns worst slack.
 
 The divided clock has to be declared in the XDC with `create_generated_clock`. Vivado works out clock frequencies on its own for the FPGA's dedicated clock generators, but a clock built from an ordinary toggling register looks like any other signal to it. Without the declaration, every register in the CPU goes unconstrained: timing analysis reported 1 endpoint instead of the ~6000 timed endpoints.
 
 Timing and utilization are measured with `test_compute.hex` loaded. Because `imem` is a ROM, Vivado optimizes away logic the loaded program never uses, so numbers are only comparable between builds using the same program.
 
+### `PC + 4` Retiming
+JAL and JALR write their return address (`PC + 4`) to `rd`. Originally the adder sat in MEM: `ex_mem_pc` was registered, and `wb_data` computed `ex_mem_pc + 4` when it selected the jump's result. Since EX/MEM forwarding also reads `wb_data`, the 32-bit adder ended up in front of the forwarding mux, and at 100 MHz it became the start of the critical path (`ex_mem_pc` -> PC + 4 adder -> `wb_data` -> forwarding -> ALU -> dmem read).
+
+That forwarding was never actually used. A taken JAL/JALR flushes the two instructions behind it, so when the jump is in MEM, the instruction in EX is always a flushed bubble with nothing to forward to. Writeback still needs `PC + 4`, but nothing needs it in the same cycle.
+
+The fix computes `id_ex_pc + 4` in EX, in parallel with the ALU rather than in series with it, and registers it as `ex_mem_pc_plus4`. Both start from the ID/EX registers on the same clock edge, but the adder's output goes straight into a register and stops, while the other branch continues through forwarding, the ALU, and the dmem read. The adder finishes well before that branch does, so its delay is hidden and no longer adds to the cycle time. `wb_data` now selects a value that is already registered instead of waiting on an adder. `ex_mem_pc` had no other users, so it was replaced, and the flip-flop count is unchanged (386). All 17 tests still pass, and JAL return addresses in `test_alu` are unchanged.
+
+At 100 MHz, WNS improved from -2.771 ns to -2.358 ns, and failing endpoints dropped from 2003 to 1054. I expected about 2 ns, since the adder alone was about 2.1 ns. The gain was only 0.41 ns because the next-worst path shares the same tail (forwarding -> ALU -> dmem read); removing the adder only cut the front of the path. Fixing the worst path is bounded by the next-worst one. The remaining limit is structural (see Clock rate).
 
 
 
@@ -170,7 +184,7 @@ The problem with `vvp` is that it outputs an exit code of 0, even when the test 
 - `imm_s`: sign-extension was 20 bits instead of 21.
 - ALU control: STORE's opcode wasn't covered in `alu_op_lo`, the same funct3 collision pattern that affected LOAD/SLT.
 - `dmem` indexing mixed `result[11:2]` and raw `result` inconsistently between read and write.
-- During the EX stage, I forwarded `ex_mem_result`, the previous instruction's ALU output. For LUI, that ALU output (x8 + I-immediate) is not LUI’s real result. This issue didn't affect the loads and jumps because of the flushing protecting JAL/JALR and stalling protecting loads. The fix was to forward `wb_data`, which already had the correct value. I proved that the fix worked by creating `test_lui.s` (`lui x1, 0x12345 -> addi x2, x1, 50`), which originally failed with `x2 = X` and passed with `x2 = 0x12345032`. `wb_data` also selects `dmem_rdata` for loads and `ex_mem_pc + 4` for JAL/JALR, so forwarding is now correct for every instruction type, not just when the stall or flush happens to prevent the problem.
+- During the EX stage, I forwarded `ex_mem_result`, the previous instruction's ALU output. For LUI, that ALU output (x8 + I-immediate) is not LUI’s real result. This issue didn't affect the loads and jumps because of the flushing protecting JAL/JALR and stalling protecting loads. The fix was to forward `wb_data`, which already had the correct value. I proved that the fix worked by creating `test_lui.s` (`lui x1, 0x12345 -> addi x2, x1, 50`), which originally failed with `x2 = X` and passed with `x2 = 0x12345032`. `wb_data` also selects `dmem_rdata` for loads and `ex_mem_pc_plus4` for JAL/JALR, so forwarding is now correct for every instruction type, not just when the stall or flush happens to prevent the problem.
 - `alu.v` and `regfile.v` declared ports without an explicit wire. Under  `` `default_nettype none `` this is invalid, but Icarus compiled it anyway; Vivado rejected it. Added wire to every port declaration.
 
 ## Scope
@@ -184,6 +198,5 @@ Hardware validation covers `test_io_loop` (switches → LEDs) and `test_compute`
 Still open:
 
 - Compliance testing with riscv-arch-test
-- 100 MHz retest of the current design (with `test_compute.hex`, so it’s comparable)
 - `imem` conversion to block RAM, deferred while resource usage stays low
 
