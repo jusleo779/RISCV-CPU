@@ -44,7 +44,6 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     reg[6:0] ex_mem_opcode;
     reg ex_mem_reg_write;
     reg[31:0] ex_mem_result;
-    reg[31:0] ex_mem_data2;
     reg[4:0] ex_mem_rd;
     reg[31:0] ex_mem_imm_u;
     reg [31:0] ex_mem_pc_plus4;
@@ -369,7 +368,6 @@ module cpu_top#( //use other modules to send specific instructions to provide th
             //ex_mem_opcode;
             ex_mem_reg_write <= 0;
             ex_mem_result <= 32'd0;
-            ex_mem_data2 <= 32'd0;
             ex_mem_rd <= 5'd0;
             ex_mem_imm_u <= 32'd0;
             ex_mem_pc_plus4 <= 32'd0;
@@ -378,7 +376,6 @@ module cpu_top#( //use other modules to send specific instructions to provide th
         else begin
             ex_mem_reg_write <= id_ex_reg_write;
             ex_mem_result <= result;
-            ex_mem_data2 <= fwd_b_ex_mem;
             ex_mem_rd <= id_ex_rd;
             ex_mem_imm_u <= id_ex_imm_u;
             ex_mem_opcode <= id_ex_opcode;
