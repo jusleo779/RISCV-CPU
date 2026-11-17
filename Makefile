@@ -88,6 +88,7 @@ test-compute:
 test:	test-alu	test-branch	test-load_store	test-lui_auipc	test-lui	test-fence	test-ecall	test-ebreak	\
 		test-stall1	test-load_gap1	test-stall2	test-load_gap2	test-stall3	test-led	test-switch	test-io_loop \
 		test-compute
+		@echo "ALL $(words $^) TESTS PASSED"
 	
 	
 clean:
