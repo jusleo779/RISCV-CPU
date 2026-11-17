@@ -10,10 +10,10 @@ Fully pipelined RV32I core with forwarding and flushing. Verified in simulation 
 |---|---|
 | ISA | RV32I, 40 instructions |
 | Pipeline | 5-stage, full forwarding, no load-use stall |
-| Clock | 50 MHz on Arty A7-100T (WNS 3.795 ns) |
+| Clock | 50 MHz on Arty A7-100T (WNS 3.888 ns) |
 | Hardware | Memory-mapped switches and LEDs; `test_compute` validated on board (all 16 switch settings) |
 | Tests | 17 simulation tests (`make test`) |
-| Resources | 1565 (2.5%) LUTs, 386 (<1%) FFs, 556 (3%) LUTRAM |
+| Resources | 1565 (2.5%) LUTs, 388 (<1%) FFs, 556 (3%) LUTRAM |
 
 ## Instructions Implemented
 
@@ -74,7 +74,7 @@ A taken branch or jump occurs after finishing EX, but by that time the IF/ID and
 | Imem Read Timing | kept the LUT RAM usage instead of BRAM  | BRAM needs a registered fetch, which breaks flush-zeroing; LUTRAM use is only ~3% |
 | Memory Map | Representation on FPGA using result's bit 31 as an identifier for leds (`0x80000000`) and switches(`0x80000004`)  | bit 31 is never set in a real memory address |
 | Clock Rate | targets 50 MHz | The critical path fails when its at 100 MHz |
-| `PC + 4` Retiming | moved `PC + 4` from MEM to EX | Shortened 100 MHz critical path by +0.41 ns |
+| `PC + 4` Retiming | moved `PC + 4` from MEM to EX | Shortened 100 MHz critical path by 0.41 ns |
 
  
 ## Design Decisions (Detailed)
@@ -89,7 +89,7 @@ ECALL and EBREAK halt happens in hardware instead of trapping. The project scope
 Block RAM (BRAM) reads synchronously, so the data arrives one cycle after the address. If the address is left in MEM, the data would be available in WB, which requires a two-cycle stall. By presenting the address in EX, the data is available in MEM, the same as the old asynchronous design, which is what made it possible to remove the load-use stall.
 
 ### Load-use Stall (removed)
- Previously, an instruction that used a load’s result immediately was stalled for one cycle. The stall was needed because EX/MEM forwarding used `ex_mem_result`, which for a load holds the address (e.g. x1(24) in `test_stall1`), not the data (99). Stalling let the load reach WB, where `mem_wb_wb_data` holds the correct value. Forwarding now uses `wb_data`, which selects `dmem_rdata` for loads, so the stall is no longer needed. Each load-use pair saves one cycle (`test_stall1`: 175 → 165 time units), and timing still passes at 50 MHz (WNS: 3.795 ns).
+ Previously, an instruction that used a load’s result immediately was stalled for one cycle. The stall was needed because EX/MEM forwarding used `ex_mem_result`, which for a load holds the address (e.g. x1(24) in `test_stall1`), not the data (99). Stalling let the load reach WB, where `mem_wb_wb_data` holds the correct value. Forwarding now uses `wb_data`, which selects `dmem_rdata` for loads, so the stall is no longer needed. Each load-use pair saves one cycle (`test_stall1`: 175 → 165 time units), and timing still passes at 50 MHz (WNS: 3.888 ns).
 
 ### Register File Initialization
  X does not exist on hardware; an uninitialized FPGA memory comes up holding whatever the synthesis tool assigned. The register file is therefore initialized to a sentinel value `0xDEADBEEF` via an initial block, which Vivado bakes into the memory’s initial contents at configuration time rather than costing runtime logic. Zeros were the alternative, rejected because a register reading 0 is indistinguishable from legitimately computed 0, while the sentinel is obviously wrong on sight. 
@@ -107,13 +107,16 @@ The initial block sits behind `` `ifdef SYNTHESIS ``, so simulation keeps X whil
 ### Clock rate
 The design targets 50 MHz, not the board's 100 MHz. At 100 MHz, the critical path fails by 2.358 ns, running from `ex_mem_rd` -> `ex_mem_matches_rs1` compare -> forwarding mux (`fwd_a`) -> ALU -> dmem address (`result[11:2]`) -> distributed RAM read -> `dmem_rdata`. About 79% of that delay is routing (signals travelling between parts of the chip) rather than logic.
 
+
 The limit is structural. Because the dmem address is presented in EX and the load-use stall was removed, forwarding, the ALU, and the memory read all happen in a single cycle. Reaching 100 MHz would mean splitting that chain with a register, which delays load data by a cycle and brings back a load-use stall. That is a trade-off between clock speed and cycles per instruction, so I kept 50 MHz and the one-cycle-faster load-use path. (Before the stall was removed, 100 MHz failed by only 0.364 ns; the stall removal is what turned a near miss into a structural limit.)
 
-A divide-by-two in `cpu_fpga_top` produces the 50 MHz clock, buffered onto a global clock network with a `BUFG`. At 50 MHz: 6265 endpoints, 0 failing, 3.795 ns worst slack.
+A divide-by-two in `cpu_fpga_top` produces the 50 MHz clock, buffered onto a global clock network with a `BUFG`. At 50 MHz: 6615 endpoints, 0 failing, 3.888 ns worst slack.
 
 The divided clock has to be declared in the XDC with `create_generated_clock`. Vivado works out clock frequencies on its own for the FPGA's dedicated clock generators, but a clock built from an ordinary toggling register looks like any other signal to it. Without the declaration, every register in the CPU goes unconstrained: timing analysis reported 1 endpoint instead of the ~6000 timed endpoints.
 
 Timing and utilization are measured with `test_compute.hex` loaded. Because `imem` is a ROM, Vivado optimizes away logic the loaded program never uses, so numbers are only comparable between builds using the same program.
+
+Note: At 50 MHz the tool stops optimizing once timing is met, so slack there reflects placement, not design quality. I compare designs at a constraint they fail, where the tool is pushing hardest.
 
 ### `PC + 4` Retiming
 JAL and JALR write their return address (`PC + 4`) to `rd`. Originally the adder sat in MEM: `ex_mem_pc` was registered, and `wb_data` computed `ex_mem_pc + 4` when it selected the jump's result. Since EX/MEM forwarding also reads `wb_data`, the 32-bit adder ended up in front of the forwarding mux, and at 100 MHz it became the start of the critical path (`ex_mem_pc` -> PC + 4 adder -> `wb_data` -> forwarding -> ALU -> dmem read).
