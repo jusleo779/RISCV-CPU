@@ -270,7 +270,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
         if(reset)begin
             halted <= 0;
         end
-        else if(is_ebreak || is_ecall)begin
+        else if(~flush && (is_ebreak || is_ecall) )begin
             halted <= 1;
         end
     end
