@@ -94,6 +94,5 @@ test:	test-alu	test-branch	test-load_store	test-lui_auipc	test-lui	test-fence	te
 		test-compute	test-halt_flush
 		@echo "ALL $(words $^) TESTS PASSED"
 	
-	
 clean:
 	rm -f rtl/*.vvp rtl/*.vcd selftest/*.o selftest/*.elf selftest/*.bin
