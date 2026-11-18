@@ -75,6 +75,7 @@ A taken branch or jump occurs after finishing EX, but by that time the IF/ID and
 | Memory Map | Representation on FPGA using result's bit 31 as an identifier for leds (`0x80000000`) and switches(`0x80000004`)  | bit 31 is never set in a real memory address |
 | Clock Rate | targets 50 MHz | The critical path fails when its at 100 MHz |
 | `PC + 4` Retiming | moved `PC + 4` from MEM to EX | Shortened 100 MHz critical path by 0.41 ns |
+| Reset | 2-flip-flop synchronizer on `clk_50`, starts in reset at power-on | Prevents metastability and flip-flops leaving reset on different cycle when working with an asynchronous button |
 
  
 ## Design Decisions (Detailed)
@@ -123,14 +124,18 @@ JAL and JALR write their return address (`PC + 4`) to `rd`. Originally the adder
 
 That forwarding was never actually used. A taken JAL/JALR flushes the two instructions behind it, so when the jump is in MEM, the instruction in EX is always a flushed bubble with nothing to forward to. Writeback still needs `PC + 4`, but nothing needs it in the same cycle.
 
-The fix computes `id_ex_pc + 4` in EX, in parallel with the ALU rather than in series with it, and registers it as `ex_mem_pc_plus4`. Both start from the ID/EX registers on the same clock edge, but the adder's output goes straight into a register and stops, while the other branch continues through forwarding, the ALU, and the dmem read. The adder finishes well before that branch does, so its delay is hidden and no longer adds to the cycle time. `wb_data` now selects a value that is already registered instead of waiting on an adder. `ex_mem_pc` had no other users, so it was replaced, and the flip-flop count is unchanged (386). All 17 tests still pass, and JAL return addresses in `test_alu` are unchanged.
+The fix computes `id_ex_pc + 4` in EX, in parallel with the ALU rather than in series with it, and registers it as `ex_mem_pc_plus4`. Both start from the ID/EX registers on the same clock edge, but the adder's output goes straight into a register and stops, while the other branch continues through forwarding, the ALU, and the dmem read. The adder finishes well before that branch does, so its delay is hidden and no longer adds to the cycle time. `wb_data` now selects a value that is already registered instead of waiting on an adder. `ex_mem_pc` had no other users, so it was replaced, and the flip-flop count is unchanged (386 at the time). All 17 tests still pass, and JAL return addresses in `test_alu` are unchanged.
 
 At 100 MHz, WNS improved from -2.771 ns to -2.358 ns, and failing endpoints dropped from 2003 to 1054. I expected about 2 ns, since the adder alone was about 2.1 ns. The gain was only 0.41 ns because the next-worst path shares the same tail (forwarding -> ALU -> dmem read); removing the adder only cut the front of the path. Fixing the worst path is bounded by the next-worst one. The remaining limit is structural (see Clock rate).
 
 
+### Reset
+`reset` is set during power-on or when the reset button is pressed. On the FPGA, `reset` is activated on a push button press, which works asynchronously to `clk_50` and can cause metastability. Metastability occurs when a flip-flop’s output gets stuck between 0 and 1 when its input changes inside the setup/hold window around its clock edge, causing an unstable signal that randomly outputs 0 or 1. Additionally, the button can cause a skew, where the reset wire reaches about 350 flip-flops at slightly different times, so some flip-flops can leave reset on a different cycle than others. Preventing both requires a synchronizer with two flip-flops clocked by `clk_50`. FF1 captures the possible metastable signal allowing it to settle for a cycle before FF2 samples FF1, which sends the clean stable signal to every flip-flop on the same edge.
+
+Both flip-flops start at 1, so the CPU resets at power-on and leaves reset for two cycles later. I excluded the path from the reset pin to FF1 with `set_false_path`: the button has no timing relationship to `clk_50`, so there is nothing to check, and FF1 settles any change that lands near its clock edge. Vivado still times every path after FF1. After the change, the `reset` pin reaches one flip-flop instead of the whole CPU, the TIMING-18 warning is gone, and timed endpoints rose from 6265 to 6615: FF2 now drives the CPU's reset pins, so Vivado can check those paths. On the board, the CPU runs at power-on without a button press.
+
 
 ## Known Simulation Artifacts
-
 In `test_lui_auipc`, the ALU output reads X during the EX stage of the instruction. X survives because the sentinel is synthesis only. This is expected, not a bug.
 
 LUI has no rs1 field, bits [19:15], which are part of the immediate in the format. The decode extracts rs1 unconditionally from every instruction, which leads to the bits being decoded as x8, which reads a register that no instruction has written. In simulation, an unwritten `reg` reads X, so the ALU computes X. This X is harmless: both forwarding and writeback take LUI’s value from `wb_data`, which selects `ex_mem_imm_u` instead of the ALU result.
