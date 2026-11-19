@@ -12,7 +12,7 @@ Fully pipelined RV32I core with forwarding and flushing. Verified in simulation 
 | Pipeline | 5-stage, full forwarding, no load-use stall |
 | Clock | 50 MHz on Arty A7-100T (WNS 3.888 ns) |
 | Hardware | Memory-mapped switches and LEDs; `test_compute` validated on board (all 16 switch settings) |
-| Tests | 17 simulation tests (`make test`) |
+| Tests | 18 simulation tests (`make test`) |
 | Resources | 1565 (2.5%) LUTs, 388 (<1%) FFs, 556 (3%) LUTRAM |
 
 ## Instructions Implemented
@@ -86,6 +86,8 @@ FENCE decodes as a NOP. It executes instructions strictly in program order, so n
 ### ECALL / EBREAK
 ECALL and EBREAK halt happens in hardware instead of trapping. The project scope excludes CSRs and the privileged architecture, so no trap handler exists to jump to. Detection happens in `cpu_top.v`, where its output is held as `halted`. It specifically halts `pc` increments and zeroes `if_id_instr`. We only halt these variables, allowing for the draining of the pipelines because `ECALL` requires earlier instructions to complete.
 
+Note: `halted` does not fire on a `flush`
+
 ### Load/Store Timing
 Block RAM (BRAM) reads synchronously, so the data arrives one cycle after the address. If the address is left in MEM, the data would be available in WB, which requires a two-cycle stall. By presenting the address in EX, the data is available in MEM, the same as the old asynchronous design, which is what made it possible to remove the load-use stall.
 
@@ -124,7 +126,7 @@ JAL and JALR write their return address (`PC + 4`) to `rd`. Originally the adder
 
 That forwarding was never actually used. A taken JAL/JALR flushes the two instructions behind it, so when the jump is in MEM, the instruction in EX is always a flushed bubble with nothing to forward to. Writeback still needs `PC + 4`, but nothing needs it in the same cycle.
 
-The fix computes `id_ex_pc + 4` in EX, in parallel with the ALU rather than in series with it, and registers it as `ex_mem_pc_plus4`. Both start from the ID/EX registers on the same clock edge, but the adder's output goes straight into a register and stops, while the other branch continues through forwarding, the ALU, and the dmem read. The adder finishes well before that branch does, so its delay is hidden and no longer adds to the cycle time. `wb_data` now selects a value that is already registered instead of waiting on an adder. `ex_mem_pc` had no other users, so it was replaced, and the flip-flop count is unchanged (386 at the time). All 17 tests still pass, and JAL return addresses in `test_alu` are unchanged.
+The fix computes `id_ex_pc + 4` in EX, in parallel with the ALU rather than in series with it, and registers it as `ex_mem_pc_plus4`. Both start from the ID/EX registers on the same clock edge, but the adder's output goes straight into a register and stops, while the other branch continues through forwarding, the ALU, and the dmem read. The adder finishes well before that branch does, so its delay is hidden and no longer adds to the cycle time. `wb_data` now selects a value that is already registered instead of waiting on an adder. `ex_mem_pc` had no other users, so it was replaced, and the flip-flop count is unchanged (386 at the time). All 18 tests still pass, and JAL return addresses in `test_alu` are unchanged.
 
 At 100 MHz, WNS improved from -2.771 ns to -2.358 ns, and failing endpoints dropped from 2003 to 1054. I expected about 2 ns, since the adder alone was about 2.1 ns. The gain was only 0.41 ns because the next-worst path shares the same tail (forwarding -> ALU -> dmem read); removing the adder only cut the front of the path. Fixing the worst path is bounded by the next-worst one. The remaining limit is structural (see Clock rate).
 
@@ -132,7 +134,7 @@ At 100 MHz, WNS improved from -2.771 ns to -2.358 ns, and failing endpoints drop
 ### Reset
 `reset` is set during power-on or when the reset button is pressed. On the FPGA, `reset` is activated on a push button press, which works asynchronously to `clk_50` and can cause metastability. Metastability occurs when a flip-flop’s output gets stuck between 0 and 1 when its input changes inside the setup/hold window around its clock edge, causing an unstable signal that randomly outputs 0 or 1. Additionally, the button can cause a skew, where the reset wire reaches about 350 flip-flops at slightly different times, so some flip-flops can leave reset on a different cycle than others. Preventing both requires a synchronizer with two flip-flops clocked by `clk_50`. FF1 captures the possible metastable signal allowing it to settle for a cycle before FF2 samples FF1, which sends the clean stable signal to every flip-flop on the same edge.
 
-Both flip-flops start at 1, so the CPU resets at power-on and leaves reset for two cycles later. I excluded the path from the reset pin to FF1 with `set_false_path`: the button has no timing relationship to `clk_50`, so there is nothing to check, and FF1 settles any change that lands near its clock edge. Vivado still times every path after FF1. After the change, the `reset` pin reaches one flip-flop instead of the whole CPU, the TIMING-18 warning is gone, and timed endpoints rose from 6265 to 6615: FF2 now drives the CPU's reset pins, so Vivado can check those paths. On the board, the CPU runs at power-on without a button press.
+Both flip-flops start at 1, so the CPU resets at power-on and resets two cycles later. I excluded the path from the reset pin to FF1 with `set_false_path`: the button has no timing relationship to `clk_50`, so there is nothing to check, and FF1 settles any change that lands near its clock edge. Vivado still times every path after FF1. After the change, the `reset` pin reaches one flip-flop instead of the whole CPU, the TIMING-18 warning is gone, and timed endpoints rose from 6265 to 6615: FF2 now drives the CPU's reset pins, so Vivado can check those paths. On the board, the CPU runs at power-on without a button press.
 
 
 ## Known Simulation Artifacts
@@ -194,6 +196,7 @@ The problem with `vvp` is that it outputs an exit code of 0, even when the test 
 - `dmem` indexing mixed `result[11:2]` and raw `result` inconsistently between read and write.
 - During the EX stage, I forwarded `ex_mem_result`, the previous instruction's ALU output. For LUI, that ALU output (x8 + I-immediate) is not LUI’s real result. This issue didn't affect the loads and jumps because of the flushing protecting JAL/JALR and stalling protecting loads. The fix was to forward `wb_data`, which already had the correct value. I proved that the fix worked by creating `test_lui.s` (`lui x1, 0x12345 -> addi x2, x1, 50`), which originally failed with `x2 = X` and passed with `x2 = 0x12345032`. `wb_data` also selects `dmem_rdata` for loads and `ex_mem_pc_plus4` for JAL/JALR, so forwarding is now correct for every instruction type, not just when the stall or flush happens to prevent the problem.
 - `alu.v` and `regfile.v` declared ports without an explicit wire. Under  `` `default_nettype none `` this is invalid, but Icarus compiled it anyway; Vivado rejected it. Added wire to every port declaration.
+- `ebreak` and `ecall` could halt the CPU from the ID stage even when that instruction was being flushed. A taken branch or JAL/JALR flushes the next two instructions because they are on the wrong path and should never run. I proved the bug with `test_halt_flush.s`: `blt x1, x2, jump` is taken, and the `ebreak` right after it is on the wrong path. Before the fix, that `ebreak` halted the CPU, so `addi x3, x0, 10` at `jump` never ran and the test failed with `x3 = X`. The fix adds `~flush` to the halt condition (`~flush && (is_ebreak || is_ecall)`), so a flushed `ebreak` or `ecall` can't halt the CPU. After the fix, the test passes with `x3 = 10`.
 
 ## Scope
 
