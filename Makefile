@@ -88,10 +88,14 @@ test-halt_flush:
 	iverilog -o rtl/halt_flush.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_halt_flush.v
 	cd rtl && vvp halt_flush.vvp | tee halt_flush.log && grep -q "ALL TEST PASSED" halt_flush.log
 
+test-subword:
+	bash selftest/build.sh test_subword
+	iverilog -o rtl/subword.vvp rtl/cpu_top.v rtl/regfile.v rtl/alu.v rtl/tb_subword.v
+	cd rtl && vvp subword.vvp | tee subword.log && grep -q "ALL TEST PASSED" subword.log
 
 test:	test-alu	test-branch	test-load_store	test-lui_auipc	test-lui	test-fence	test-ecall	test-ebreak	\
 		test-stall1	test-load_gap1	test-stall2	test-load_gap2	test-stall3	test-led	test-switch	test-io_loop \
-		test-compute	test-halt_flush
+		test-compute	test-halt_flush	test-subword
 		@echo "ALL $(words $^) TESTS PASSED"
 	
 clean:
