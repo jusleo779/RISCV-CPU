@@ -60,7 +60,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
 //Instruction Fetch Stage
 
     // Program Counter
-    reg [31:0] pc = 32'b0; // holds address of current instruction in imem
+    reg [31:0] pc = 32'b0; // holds "address" of current instruction in imem
 
 
     // Instruction memory: word-addressed, 32-bit wide
@@ -203,27 +203,46 @@ module cpu_top#( //use other modules to send specific instructions to provide th
             dmem_rdata <= 32'd0;
         end
         else begin
-            //Load
-            if(id_ex_opcode == 7'b0000011)begin
-                if(result[31])begin
-                    if(result[2])
-                        dmem_rdata <= {{28{1'b0}}, switches[3:0]};
-                end
-                else    
-                    dmem_rdata <= dmem[result[11:2]];        // data memory Load
-            end
             //Store
             if(id_ex_opcode == 7'b0100011)begin
                 if(result[31])begin
                     if(!result[2])
                         led_reg[3:0] <= fwd_b_ex_mem[3:0];  // since I am working with sw with 0 gap in between instructions 
                 end                                         // I must forward the right led pattern 
-                else    
-                    dmem[result[11:2]] <= fwd_b_ex_mem;     // store copy for rs2 to memory
+                else begin // store copy for rs2 to memory 
+                    if(id_ex_funct3[2:0] == 3'b010 )         // SW
+                        dmem[result[11:2]] <= fwd_b_ex_mem;     
+                    else if(id_ex_funct3[2:0] == 3'b001)     // SH
+                        dmem[result[11:2]][result[1] * 16 +: 16] <= fwd_b_ex_mem[15:0];
+                    else if(id_ex_funct3[2:0] == 3'b000)     // SB
+                        dmem[result[11:2]][result[1:0] * 8 +: 8] <= fwd_b_ex_mem[7:0];      
+                end
+            end
+
+            //Load
+            if(id_ex_opcode == 7'b0000011)begin
+                if(result[31])begin
+                    if(result[2])
+                        dmem_rdata <= {{28{1'b0}}, switches[3:0]};
+                end
+                else begin // data memory Load 
+                    if(id_ex_funct3[2:0] == 3'b010)             // LW
+                        dmem_rdata <= dmem[result[11:2]];      
+                    else if (id_ex_funct3[2:0] == 3'b000)       // LB
+                        dmem_rdata <= { {24{$signed(dmem[result[11:2]][result[1:0] * 8 + 7])}}, dmem[result[11:2]][result[1:0] * 8 +: 8]}; 
+
+                    else if (id_ex_funct3[2:0] == 3'b001)       // LH
+                        dmem_rdata <= { {16{$signed(dmem[result[11:2]][result[1] * 16 + 15])}}, dmem[result[11:2]][result[1] * 16 +: 16]}; 
+
+                    else if (id_ex_funct3[2:0] == 3'b100)       // LBU
+                        dmem_rdata <= {24'b0, dmem[result[11:2]][result[1:0] * 8 +: 8]}; 
+
+                    else if (id_ex_funct3[2:0] == 3'b101)       // LHU
+                        dmem_rdata <= {16'b0, dmem[result[11:2]][result[1] * 16 +: 16]}; 
+                end
             end
         end
     end
-  
    
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -238,7 +257,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
 // Write Back Stage
 
     //Write Enable to Registers
-    //list of possible operation codes that allow for the funciton to write into the registers
+    //list of possible operation codes that allow for the function to write into the registers
     wire reg_write = (opcode == 7'b0110111) ||                          // U-type (LUI - upper immediate)
                      (opcode == 7'b0010111) ||                          // U-type (AUIPC - upper immediate)
                      (opcode == 7'b1101111) ||                          // J-type (JAL - jumps)
