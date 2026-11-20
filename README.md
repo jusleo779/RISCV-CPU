@@ -12,7 +12,7 @@ Fully pipelined RV32I core with forwarding and flushing. Verified in simulation 
 | Pipeline | 5-stage, full forwarding, no load-use stall |
 | Clock | 50 MHz on Arty A7-100T (WNS 3.888 ns) |
 | Hardware | Memory-mapped switches and LEDs; `test_compute` validated on board (all 16 switch settings) |
-| Tests | 18 simulation tests (`make test`) |
+| Tests | 19 simulation tests (`make test`) |
 | Resources | 1565 (2.5%) LUTs, 388 (<1%) FFs, 556 (3%) LUTRAM |
 
 ## Instructions Implemented
@@ -191,12 +191,20 @@ The problem with `vvp` is that it outputs an exit code of 0, even when the test 
 ## Known Bugs Fixed
 
 - `regfile.v`: x0 write guard existed on the read path but not the write path, so writes to x0 silently succeeded.
+
 - `imm_s`: sign-extension was 20 bits instead of 21.
+
 - ALU control: STORE's opcode wasn't covered in `alu_op_lo`, the same funct3 collision pattern that affected LOAD/SLT.
+
 - `dmem` indexing mixed `result[11:2]` and raw `result` inconsistently between read and write.
+
 - During the EX stage, I forwarded `ex_mem_result`, the previous instruction's ALU output. For LUI, that ALU output (x8 + I-immediate) is not LUI’s real result. This issue didn't affect the loads and jumps because of the flushing protecting JAL/JALR and stalling protecting loads. The fix was to forward `wb_data`, which already had the correct value. I proved that the fix worked by creating `test_lui.s` (`lui x1, 0x12345 -> addi x2, x1, 50`), which originally failed with `x2 = X` and passed with `x2 = 0x12345032`. `wb_data` also selects `dmem_rdata` for loads and `ex_mem_pc_plus4` for JAL/JALR, so forwarding is now correct for every instruction type, not just when the stall or flush happens to prevent the problem.
+
 - `alu.v` and `regfile.v` declared ports without an explicit wire. Under  `` `default_nettype none `` this is invalid, but Icarus compiled it anyway; Vivado rejected it. Added wire to every port declaration.
+
 - `ebreak` and `ecall` could halt the CPU from the ID stage even when that instruction was being flushed. A taken branch or JAL/JALR flushes the next two instructions because they are on the wrong path and should never run. I proved the bug with `test_halt_flush.s`: `blt x1, x2, jump` is taken, and the `ebreak` right after it is on the wrong path. Before the fix, that `ebreak` halted the CPU, so `addi x3, x0, 10` at `jump` never ran and the test failed with `x3 = X`. The fix adds `~flush` to the halt condition (`~flush && (is_ebreak || is_ecall)`), so a flushed `ebreak` or `ecall` can't halt the CPU. After the fix, the test passes with `x3 = 10`.
+
+- The load and store operations failed on all operations besides `lw` and `sw`, because load/store operations would output/copy the full word instead of specific bytes of the word. I proved the bug through `test_subword.s`, which had a background value `0x11223344` that helps differentiate between replacing specific bytes v.s. changing more bytes than told to. Before the fix, `sh` and `sb` would take the whole word to store and change parts of the output (ex. `0x11223344 -> 0x000000AB`, expected `0x1122AB44`  (`sb`), `0x11223344 -> 0x0000BEEF`, expected `0xBEEF3344` (`sh`)). This test also covered load operations, `lh`, `lb`, `lhu`, `lbu`, which failed at filling with the signed/unsigned bits and instead outputted the word again (ex. `0x80017F9C -> 0x80017F9C`, expected `0xFFFFFF9C` for `lb x12, 0(x6)` or `0x80017F9C -> 0x80017F9C`, expected `0x0000009C` for `lbu x13, 0(x6)`). The fix added a dependency on `id_ex_funct3[2:0]`, which decides load/store width and sign, while `result[1:0]` decides the byte lanes. The other fix was outputting the correct signed extensions for `lh`/`lb` or zero extensions for `lhu`/`lbu` to fill the upper bits of the output. After the fix, all 19 tests passed with the correct outputs.
 
 ## Scope
 
