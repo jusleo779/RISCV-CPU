@@ -32,3 +32,4 @@ _start:
 
 loop:
     j    loop                 # j-to-self: testbench waits for this
+
