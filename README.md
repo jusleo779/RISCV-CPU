@@ -10,10 +10,10 @@ Fully pipelined RV32I core with forwarding and flushing. Verified in simulation 
 |---|---|
 | ISA | RV32I, 40 instructions |
 | Pipeline | 5-stage, full forwarding, no load-use stall |
-| Clock | 50 MHz on Arty A7-100T (WNS 3.888 ns) |
+| Clock | 50 MHz on Arty A7-100T (WNS 2.694 ns) |
 | Hardware | Memory-mapped switches and LEDs; `test_compute` validated on board (all 16 switch settings) |
 | Tests | 19 simulation tests (`make test`) |
-| Resources | 1565 (2.5%) LUTs, 388 (<1%) FFs, 556 (3%) LUTRAM |
+| Resources | 1650 (2.6%) LUTs, 388 (<1%) FFs, 556 (3%) LUTRAM |
 
 ## Instructions Implemented
 
@@ -92,7 +92,7 @@ Note: `halted` does not fire on a `flush`
 Block RAM (BRAM) reads synchronously, so the data arrives one cycle after the address. If the address is left in MEM, the data would be available in WB, which requires a two-cycle stall. By presenting the address in EX, the data is available in MEM, the same as the old asynchronous design, which is what made it possible to remove the load-use stall.
 
 ### Load-use Stall (removed)
- Previously, an instruction that used a load’s result immediately was stalled for one cycle. The stall was needed because EX/MEM forwarding used `ex_mem_result`, which for a load holds the address (e.g. x1(24) in `test_stall1`), not the data (99). Stalling let the load reach WB, where `mem_wb_wb_data` holds the correct value. Forwarding now uses `wb_data`, which selects `dmem_rdata` for loads, so the stall is no longer needed. Each load-use pair saves one cycle (`test_stall1`: 175 → 165 time units), and timing still passes at 50 MHz (WNS: 3.888 ns).
+ Previously, an instruction that used a load’s result immediately was stalled for one cycle. The stall was needed because EX/MEM forwarding used `ex_mem_result`, which for a load holds the address (e.g. x1(24) in `test_stall1`), not the data (99). Stalling let the load reach WB, where `mem_wb_wb_data` holds the correct value. Forwarding now uses `wb_data`, which selects `dmem_rdata` for loads, so the stall is no longer needed. Each load-use pair saves one cycle (`test_stall1`: 175 → 165 time units), and timing still passes at 50 MHz (WNS: 2.694 ns).
 
 ### Register File Initialization
  X does not exist on hardware; an uninitialized FPGA memory comes up holding whatever the synthesis tool assigned. The register file is therefore initialized to a sentinel value `0xDEADBEEF` via an initial block, which Vivado bakes into the memory’s initial contents at configuration time rather than costing runtime logic. Zeros were the alternative, rejected because a register reading 0 is indistinguishable from legitimately computed 0, while the sentinel is obviously wrong on sight. 
@@ -113,7 +113,7 @@ The design targets 50 MHz, not the board's 100 MHz. At 100 MHz, the critical pat
 
 The limit is structural. Because the dmem address is presented in EX and the load-use stall was removed, forwarding, the ALU, and the memory read all happen in a single cycle. Reaching 100 MHz would mean splitting that chain with a register, which delays load data by a cycle and brings back a load-use stall. That is a trade-off between clock speed and cycles per instruction, so I kept 50 MHz and the one-cycle-faster load-use path. (Before the stall was removed, 100 MHz failed by only 0.364 ns; the stall removal is what turned a near miss into a structural limit.)
 
-A divide-by-two in `cpu_fpga_top` produces the 50 MHz clock, buffered onto a global clock network with a `BUFG`. At 50 MHz: 6615 endpoints, 0 failing, 3.888 ns worst slack.
+A divide-by-two in `cpu_fpga_top` produces the 50 MHz clock, buffered onto a global clock network with a `BUFG`. At 50 MHz: 6616 endpoints, 0 failing, 2.694 ns worst slack.
 
 The divided clock has to be declared in the XDC with `create_generated_clock`. Vivado works out clock frequencies on its own for the FPGA's dedicated clock generators, but a clock built from an ordinary toggling register looks like any other signal to it. Without the declaration, every register in the CPU goes unconstrained: timing analysis reported 1 endpoint instead of the ~6000 timed endpoints.
 
@@ -126,7 +126,7 @@ JAL and JALR write their return address (`PC + 4`) to `rd`. Originally the adder
 
 That forwarding was never actually used. A taken JAL/JALR flushes the two instructions behind it, so when the jump is in MEM, the instruction in EX is always a flushed bubble with nothing to forward to. Writeback still needs `PC + 4`, but nothing needs it in the same cycle.
 
-The fix computes `id_ex_pc + 4` in EX, in parallel with the ALU rather than in series with it, and registers it as `ex_mem_pc_plus4`. Both start from the ID/EX registers on the same clock edge, but the adder's output goes straight into a register and stops, while the other branch continues through forwarding, the ALU, and the dmem read. The adder finishes well before that branch does, so its delay is hidden and no longer adds to the cycle time. `wb_data` now selects a value that is already registered instead of waiting on an adder. `ex_mem_pc` had no other users, so it was replaced, and the flip-flop count is unchanged (386 at the time). All 19 tests still pass, and JAL return addresses in `test_alu` are unchanged.
+The fix computes `id_ex_pc + 4` in EX, in parallel with the ALU rather than in series with it, and registers it as `ex_mem_pc_plus4`. Both start from the ID/EX registers on the same clock edge, but the adder's output goes straight into a register and stops, while the other branch continues through forwarding, the ALU, and the dmem read. The adder finishes well before that branch does, so its delay is hidden and no longer adds to the cycle time. `wb_data` now selects a value that is already registered instead of waiting on an adder. `ex_mem_pc` had no other users, so it was replaced, and the flip-flop count is unchanged (386 at the time). All 17 tests still pass, and JAL return addresses in `test_alu` are unchanged.
 
 At 100 MHz, WNS improved from -2.771 ns to -2.358 ns, and failing endpoints dropped from 2003 to 1054. I expected about 2 ns, since the adder alone was about 2.1 ns. The gain was only 0.41 ns because the next-worst path shares the same tail (forwarding -> ALU -> dmem read); removing the adder only cut the front of the path. Fixing the worst path is bounded by the next-worst one. The remaining limit is structural (see Clock rate).
 
