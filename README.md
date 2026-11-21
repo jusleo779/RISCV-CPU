@@ -77,6 +77,7 @@ A taken branch or jump occurs after finishing EX, but by that time the IF/ID and
 | `PC + 4` Retiming | moved `PC + 4` from MEM to EX | Shortened 100 MHz critical path by 0.41 ns |
 | Reset | 2-flip-flop synchronizer on `clk_50`, starts in reset at power-on | Prevents metastability and flip-flops leaving reset on different cycle when working with an asynchronous button |
 
+
  
 ## Design Decisions (Detailed)
 
@@ -135,6 +136,7 @@ At 100 MHz, WNS improved from -2.771 ns to -2.358 ns, and failing endpoints drop
 `reset` is set during power-on or when the reset button is pressed. On the FPGA, `reset` is activated on a push button press, which works asynchronously to `clk_50` and can cause metastability. Metastability occurs when a flip-flop’s output gets stuck between 0 and 1 when its input changes inside the setup/hold window around its clock edge, causing an unstable signal that randomly outputs 0 or 1. Additionally, the button can cause a skew, where the reset wire reaches about 350 flip-flops at slightly different times, so some flip-flops can leave reset on a different cycle than others. Preventing both requires a synchronizer with two flip-flops clocked by `clk_50`. FF1 captures the possible metastable signal allowing it to settle for a cycle before FF2 samples FF1, which sends the clean stable signal to every flip-flop on the same edge.
 
 Both flip-flops start at 1, so the CPU resets at power-on and resets two cycles later. I excluded the path from the reset pin to FF1 with `set_false_path`: the button has no timing relationship to `clk_50`, so there is nothing to check, and FF1 settles any change that lands near its clock edge. Vivado still times every path after FF1. After the change, the `reset` pin reaches one flip-flop instead of the whole CPU, the TIMING-18 warning is gone, and timed endpoints rose from 6265 to 6615: FF2 now drives the CPU's reset pins, so Vivado can check those paths. On the board, the CPU runs at power-on without a button press.
+
 
 
 ## Known Simulation Artifacts
@@ -208,7 +210,7 @@ The problem with `vvp` is that it outputs an exit code of 0, even when the test 
 
 ## Scope
 
-RV32I base integer instruction set, 40 instructions (with EBREAK/ECALL-as-halted and FENCE-as-NOP). No CSR support, no privileged architecture, no interrupt handling. Pipelined with forwarding and flushing.
+RV32I base integer instruction set, 40 instructions (with EBREAK/ECALL-as-halted and FENCE-as-NOP). No CSR support, no privileged architecture, no interrupt handling. Pipelined with forwarding and flushing. Misaligned loads/stores are not supported (no trap; results are undefined).
 
 ## Future Project Extension
 
