@@ -208,6 +208,36 @@ The problem with `vvp` is that it outputs an exit code of 0, even when the test 
 
 - The load and store operations failed on all operations besides `lw` and `sw`, because load/store operations would output/copy the full word instead of specific bytes of the word. I proved the bug through `test_subword.s`, which had a background value `0x11223344` that helps differentiate between replacing specific bytes v.s. changing more bytes than told to. Before the fix, `sh` and `sb` would take the whole word to store and change parts of the output (ex. `0x11223344 -> 0x000000AB`, expected `0x1122AB44`  (`sb`), `0x11223344 -> 0x0000BEEF`, expected `0xBEEF3344` (`sh`)). This test also covered load operations, `lh`, `lb`, `lhu`, `lbu`, which failed at filling with the signed/unsigned bits and instead outputted the word again (ex. `0x80017F9C -> 0x80017F9C`, expected `0xFFFFFF9C` for `lb x12, 0(x6)` or `0x80017F9C -> 0x80017F9C`, expected `0x0000009C` for `lbu x13, 0(x6)`). The fix added a dependency on `id_ex_funct3[2:0]`, which decides load/store width and sign, while `result[1:0]` decides the byte lanes. The other fix was outputting the correct signed extensions for `lh`/`lb` or zero extensions for `lhu`/`lbu` to fill the upper bits of the output. After the fix, all 19 tests passed with the correct outputs.
 
+
+### Board test: `test_compute`
+
+The deployed program reads the 4 switches, does a signed compute, and writes the result to the 4 LEDs. Every switch setting gives a different LED pattern, so a wrong ALU or branch result shows up as a visible mismatch.
+
+| d = s − 8 | Switches | LEDs | | d = s − 8 | Switches | LEDs |
+|:---:|:---:|:---:|---|:---:|:---:|:---:|
+| −8 | 0000 | 1111 | | 0 | 1000 | 0000 |
+| −7 | 0001 | 1110 | | 1 | 1001 | 0001 |
+| −6 | 0010 | 1101 | | 2 | 1010 | 0010 |
+| −5 | 0011 | 1100 | | 3 | 1011 | 0011 |
+| −4 | 0100 | 1011 | | 4 | 1100 | 0100 |
+| −3 | 0101 | 1010 | | 5 | 1101 | 0101 |
+| −2 | 0110 | 1001 | | 6 | 1110 | 0110 |
+| −1 | 0111 | 1000 | | 7 | 1111 | 0111 |
+
+- **sw 0xxx:** LEDs = 15 − s (every bit flipped). This path takes the `blt` branch and uses `srai`.
+- **sw 1xxx:** LEDs = s − 8 (bit 3 cleared). This path doesn't take the branch.
+
+**What a failure looks like:**
+| Symptom | Likely cause |
+|---|---|
+| LEDs = switches on 0xxx | `blt` acting like `bltu` (branch never taken) |
+| sw `0011` → LEDs `1011` | `srai` acting like `srli` |
+| LEDs stuck at `0000` | CPU not running / reset not pressed |
+
+Note: sw `1000` correctly shows `0000`, which looks the same as a stuck CPU. Check another 1xxx setting to tell them apart.
+
+Chart worked out by hand from the RV32I spec, not from simulation output. Verified on the Arty A7-100T at 50 MHz: Nov 22, 2026 all 16 settings.
+
 ## Scope
 
 RV32I base integer instruction set, 40 instructions (with EBREAK/ECALL-as-halted and FENCE-as-NOP). No CSR support, no privileged architecture, no interrupt handling. Pipelined with forwarding and flushing. Misaligned loads/stores are not supported (no trap; results are undefined).
