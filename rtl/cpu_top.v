@@ -72,11 +72,18 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     
 
     //before simulation (IF- Instruction Fetch)
+    // Load the same program image into BOTH memories.
+    // imem: the CPU fetches instructions from here.
+    // dmem: the image also holds data (constants, tables) that no store
+    //       instruction ever writes. Loads read dmem, so without this
+    //       those loads would return X in simulation.
     initial begin
     `ifdef SYNTHESIS
-            $readmemh(test_file, imem); //fills array from the start from hex file
+            $readmemh(test_file, imem); // fills array from the start from hex file
+            $readmemh(test_file, dmem); // same as sim, so board and sim start with identical dmem
      `else 
             $readmemh({"../selftest/", test_file}, imem);  // Icarus runs from rtl/
+            $readmemh({"../selftest/", test_file}, dmem);  // image's .rodata/.data are placed by the linker, never stored; lw reads dmem
      `endif
     end
 
