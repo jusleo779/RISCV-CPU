@@ -1,6 +1,7 @@
 `default_nettype none
 module cpu_top#( //use other modules to send specific instructions to provide the output
-    parameter test_file = "test_compute.hex"
+    parameter test_file = "test_compute.hex",
+    parameter addr_bits = 12 // allows for adjustable memory
 )(
     input wire clk,
     input wire reset,
@@ -62,13 +63,13 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     // Program Counter
     reg [31:0] pc = 32'b0; // holds "address" of current instruction in imem
 
-
     // Instruction memory: word-addressed, 32-bit wide
-    reg [31:0] imem [0:1023]; //1024 instances of imem(an array) that holds 32 bits
+    reg [31:0] imem [0: 2**(addr_bits - 2) - 1]; // instances of imem(an array) that holds 32 bits
     wire [31:0] instr;
 
     // data memory
-    reg [31:0] dmem[0:1023];
+    reg [31:0] dmem[0: 2**(addr_bits - 2) - 1];
+    
 
     //before simulation (IF- Instruction Fetch)
     initial begin
@@ -79,7 +80,7 @@ module cpu_top#( //use other modules to send specific instructions to provide th
      `endif
     end
 
-    assign instr = imem[pc[11:2]]; //memory of instructions that is held at the address in pc
+    assign instr = imem[pc[addr_bits - 1:2]]; //memory of instructions that is held at the address in pc
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Instruction Decode Stage
@@ -211,11 +212,11 @@ module cpu_top#( //use other modules to send specific instructions to provide th
                 end                                         // I must forward the right led pattern 
                 else begin // store copy for rs2 to memory 
                     if(id_ex_funct3[2:0] == 3'b010 )         // SW
-                        dmem[result[11:2]] <= fwd_b_ex_mem;     
+                        dmem[result[addr_bits - 1:2]] <= fwd_b_ex_mem;     
                     else if(id_ex_funct3[2:0] == 3'b001)     // SH
-                        dmem[result[11:2]][result[1] * 16 +: 16] <= fwd_b_ex_mem[15:0];
+                        dmem[result[addr_bits - 1:2]][result[1] * 16 +: 16] <= fwd_b_ex_mem[15:0];
                     else if(id_ex_funct3[2:0] == 3'b000)     // SB
-                        dmem[result[11:2]][result[1:0] * 8 +: 8] <= fwd_b_ex_mem[7:0];      
+                        dmem[result[addr_bits - 1:2]][result[1:0] * 8 +: 8] <= fwd_b_ex_mem[7:0];      
                 end
             end
 
@@ -227,18 +228,18 @@ module cpu_top#( //use other modules to send specific instructions to provide th
                 end
                 else begin // data memory Load 
                     if(id_ex_funct3[2:0] == 3'b010)             // LW
-                        dmem_rdata <= dmem[result[11:2]];      
+                        dmem_rdata <= dmem[result[addr_bits - 1:2]];      
                     else if (id_ex_funct3[2:0] == 3'b000)       // LB
-                        dmem_rdata <= { {24{$signed(dmem[result[11:2]][result[1:0] * 8 + 7])}}, dmem[result[11:2]][result[1:0] * 8 +: 8]}; 
+                        dmem_rdata <= { {24{$signed(dmem[result[addr_bits - 1:2]][result[1:0] * 8 + 7])}}, dmem[result[addr_bits - 1:2]][result[1:0] * 8 +: 8]}; 
 
                     else if (id_ex_funct3[2:0] == 3'b001)       // LH
-                        dmem_rdata <= { {16{$signed(dmem[result[11:2]][result[1] * 16 + 15])}}, dmem[result[11:2]][result[1] * 16 +: 16]}; 
+                        dmem_rdata <= { {16{$signed(dmem[result[addr_bits - 1:2]][result[1] * 16 + 15])}}, dmem[result[addr_bits - 1:2]][result[1] * 16 +: 16]}; 
 
                     else if (id_ex_funct3[2:0] == 3'b100)       // LBU
-                        dmem_rdata <= {24'b0, dmem[result[11:2]][result[1:0] * 8 +: 8]}; 
+                        dmem_rdata <= {24'b0, dmem[result[addr_bits - 1:2]][result[1:0] * 8 +: 8]}; 
 
                     else if (id_ex_funct3[2:0] == 3'b101)       // LHU
-                        dmem_rdata <= {16'b0, dmem[result[11:2]][result[1] * 16 +: 16]}; 
+                        dmem_rdata <= {16'b0, dmem[result[addr_bits - 1:2]][result[1] * 16 +: 16]}; 
                 end
             end
         end
