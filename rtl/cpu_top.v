@@ -1,7 +1,8 @@
 `default_nettype none
 module cpu_top#( //use other modules to send specific instructions to provide the output
     parameter test_file = "test_compute.hex",
-    parameter addr_bits = 12 // allows for adjustable memory
+    parameter addr_bits = 12, // allows for adjustable memory
+    parameter hex_dir   = "../selftest/"      // sim only: folder test_file is read from (Icarus runs from rtl/)
 )(
     input wire clk,
     input wire reset,
@@ -82,8 +83,8 @@ module cpu_top#( //use other modules to send specific instructions to provide th
             $readmemh(test_file, imem); // fills array from the start from hex file
             $readmemh(test_file, dmem); // same as sim, so board and sim start with identical dmem
      `else 
-            $readmemh({"../selftest/", test_file}, imem);  // Icarus runs from rtl/
-            $readmemh({"../selftest/", test_file}, dmem);  // image's .rodata/.data are placed by the linker, never stored; lw reads dmem
+            $readmemh({hex_dir, test_file}, imem);  // Icarus runs from rtl/
+            $readmemh({hex_dir, test_file}, dmem);  // image's .rodata/.data are placed by the linker, never stored; lw reads dmem
      `endif
     end
 
