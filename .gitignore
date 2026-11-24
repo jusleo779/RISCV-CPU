@@ -22,3 +22,5 @@ selftest/*.elf
 selftest/*.bin
 rtl/*.vvp
 *.vcd
+arch-test/work/
+arch-test/hex/
