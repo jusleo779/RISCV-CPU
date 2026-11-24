@@ -242,6 +242,8 @@ Chart worked out by hand from the RV32I spec, not from simulation output. Verifi
 
 RV32I base integer instruction set, 40 instructions (with EBREAK/ECALL-as-halted and FENCE-as-NOP). No CSR support, no privileged architecture, no interrupt handling. Pipelined with forwarding and flushing. Misaligned loads/stores are not supported (no trap; results are undefined).
 
+The loads and stores are not trapped when working with addresses that are not naturally aligned instructions. For example, an offset of 1 for lw will give the word from an offset of 0 instead of taking 3 bytes from the current word and 1 byte from the next word. This means that the lower address bits are ignored and rounded down to the nearest aligned address
+
 ## Future Project Extension
 
 Hardware validation covers `test_io_loop` (switches → LEDs) and `test_compute`, where shifts, a signed compare, and a signed branch determine the LED output; all 16 switch settings were checked against a hand-derived chart.
