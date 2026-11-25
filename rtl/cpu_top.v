@@ -79,10 +79,11 @@ module cpu_top#( //use other modules to send specific instructions to provide th
     //       instruction ever writes. Loads read dmem, so without this
     //       those loads would return X in simulation.
     initial begin
-    `ifdef SYNTHESIS
+    `ifdef SYNTHESIS //loads hex file alone since in same folder on Vivado
             $readmemh(test_file, imem); // fills array from the start from hex file
             $readmemh(test_file, dmem); // same as sim, so board and sim start with identical dmem
-     `else 
+
+     `else  // loads specific file path to get to the right hex file 
             $readmemh({hex_dir, test_file}, imem);  // Icarus runs from rtl/
             $readmemh({hex_dir, test_file}, dmem);  // image's .rodata/.data are placed by the linker, never stored; lw reads dmem
      `endif
@@ -302,18 +303,20 @@ module cpu_top#( //use other modules to send specific instructions to provide th
             halted <= 1;
         end
     end
-
-    // Debug: print what's happening each cycle
-    always @(posedge clk) begin
-    if (!reset && !halted)
-        $display("IF: pc=%0d | ID: instr=%h rs1=%0d rs2=%0d rd=%0d | EX: op=%b rs1=%0d rd=%0d res=%0d | MEM: rd=%0d wb=%0d | WB: rd=%0d data=%0d rw=%b",
-            pc,
-            if_id_instr, rs1, rs2, rd,
-            id_ex_opcode, id_ex_rs1, id_ex_rd, result,
-            ex_mem_rd, wb_data,
-            mem_wb_rd, mem_wb_wb_data, mem_wb_reg_write
-            );
-    end
+    `ifdef DEBUG_TRACE //call -DDEBUG_TRACE in the iverilog statement to include the line by line outputs and if not called its removed
+                       // Arch test are long so it's better to not print everything into a log
+        // Debug: print what's happening each cycle
+        always @(posedge clk) begin
+        if (!reset && !halted)
+            $display("IF: pc=%0d | ID: instr=%h rs1=%0d rs2=%0d rd=%0d | EX: op=%b rs1=%0d rd=%0d res=%0d | MEM: rd=%0d wb=%0d | WB: rd=%0d data=%0d rw=%b",
+                pc,
+                if_id_instr, rs1, rs2, rd,
+                id_ex_opcode, id_ex_rs1, id_ex_rd, result,
+                ex_mem_rd, wb_data,
+                mem_wb_rd, mem_wb_wb_data, mem_wb_reg_write
+                );
+        end
+    `endif
     
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //Pipelining(saving instructions from previous states to be used)
