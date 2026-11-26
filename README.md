@@ -12,7 +12,7 @@ Fully pipelined RV32I core with forwarding and flushing. Verified in simulation 
 | Pipeline | 5-stage, full forwarding, no load-use stall |
 | Clock | 50 MHz on Arty A7-100T (WNS 2.694 ns) |
 | Hardware | Memory-mapped switches and LEDs; `test_compute` validated on board (all 16 switch settings) |
-| Tests | 19 simulation tests (`make test`) |
+| Tests | 19 directed tests (`make test`) + 39 ACT4 arch-tests, all passing |
 | Resources | 1650 (2.6%) LUTs, 388 (<1%) FFs, 556 (3%) LUTRAM |
 
 ## Instructions Implemented
@@ -147,6 +147,9 @@ LUI has no rs1 field, bits [19:15], which are part of the immediate in the forma
 ## Structure
 
 ```
+arch-test/
+  picorv32-rv32imc/         adapted from picorv32 for this core's memory layout and halt
+  run_arch.sh               converts each ELF to hex, runs it, prints PASS / FAILED / TIMEOUT
 rtl/
   cpu_fpga_top.v            top-level for FPGA and change clock speed to 50 MHz
   cpu_top.v                 top-level datapath and control
@@ -187,7 +190,7 @@ Each instruction group gets its own testbench and test program. Each testbench c
 
 The problem with `vvp` is that it outputs an exit code of 0, even when the test fails. The fix was to add `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, where `tee` will save the outputs and output into the log and `grep` checks if the output string is passing. I tested this with `test_stall1`, where I made a failing test without the added `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, which revealed an exit code of 0, even though the test failed. But when I added the `tee <name>.log && grep -q "ALL TEST PASSED" <name>.log`, `grep` exits with 1, while `make` exits with 2. After checking this, I restored  `test_stall1` to a passing test and found that with the new added check, it outputted 0. Thus, the extra check prevents hidden errors from occurring.
 
-**Fault injection**. A test that has never failed proves nothing, so each new test is checked by breaking one path in the RTL, confirming the test fails with the predicted value, and restoring it with `git checkout`. This found two gaps: the first one-gap load test exercised only forwarding operand A (fixed by using `add x5, x4, x4`), and `test_compute` v1 combined SLT and SRLI results with OR, which hid an SRA-acting-as-SRL bug (fixed by switching to ADD). In `test_compute` v2, SRA-as-SRL gives LEDs 1011 instead of 1100, and BLT-as-BLTU gives 0011.
+**Fault injection**. A test that has never failed proves nothing, so each new test is checked by breaking one path in the RTL, confirming the test fails with the predicted value, and restoring it with `git checkout`. This found two gaps: the first one-gap load test exercised only forwarding operand A (fixed by using `add x5, x4, x4`), and `test_compute` v1 combined SLT and SRLI results with OR, which hid an SRA-acting-as-SRL bug (fixed by switching to ADD). In `test_compute` v2, SRA-as-SRL gives LEDs 1011 instead of 1100, and BLT-as-BLTU gives 0011. In `arch-test`, all 39 tests passed, so `sltu` and `sltiu` were purposely broken by changing `a < b` -> `a < (b + 5)`; exactly the 2 predicted tests failed, proving the tests can fail.
 
 
 ## Known Bugs Fixed
@@ -238,18 +241,40 @@ Note: sw `1000` correctly shows `0000`, which looks the same as a stuck CPU. Che
 
 Chart worked out by hand from the RV32I spec, not from simulation output. Verified on the Arty A7-100T at 50 MHz: Nov 22, 2026 all 16 settings.
 
+
+### Arch-Test
+
+All 39 RV32I tests pass (Nov 26, 2026, commit `669a905`)
+Not covered: ecall, ebreak, misaligned access.
+
+The CPU passes the arch-test suite (ACTs, Architectural Certification Tests) from RISC-V International, run with the ACT4 framework and ported to this core in `arch-test/`.
+
+ACT4 checks itself by first doing the instruction under test, then a load of the right answer. The right answer was computed by Sail, the reference model, when the test was built, and stored in the program's data before it ran. We then compare if both are equal to each other using `beq`. If the check passes it skips `jal` and two `.word`s and continues to the next check. If it fails it will jump to the failure code, which reads the two `.word`s: the address of the check it failed on and a pointer to a description of the failed test.
+
+We know if the test passed for real by purposefully breaking the CPU to check for failure. When a test is unable to fail, it can cause a false pass. For example, breaking `sltu` and `sltiu` by changing the comparison to `a < (b + 5)` caused exactly the 2 predicted failures (`I-sltu-00`, `I-sltiu-00`); the other 37 still passed. The second check (done for `I-add-00`) we need to do is comparing the amount of checks in the program compared to my run's amount of skipped checks. 392 checks in the program, 392 skipped in the run. When we see the skips and checks are the same we know every check ran and passed. For `I-add-00`, we also compared to our predictions by calculating and comparing the cycle count of the answer. When our predictions were different, we had to check the program for skipped test cases.
+
+```bash
+# 1. Build the 39 ELFs (needs riscv-arch-test cloned to ~/projects, plus Sail and the RISC-V toolchain)
+cd ~/projects/riscv-arch-test
+make CONFIG_FILES=~/projects/riscv-cpu/arch-test/picorv32-rv32imc/test_config.yaml EXTENSIONS=I DEBUG=True WORKDIR=~/projects/riscv-cpu/arch-test/work
+
+# 2. Run all 39 (from the riscv-cpu repo root)
+cd ~/projects/riscv-cpu
+chmod +x arch-test/run_arch.sh   # once
+./arch-test/run_arch.sh
+```
+
 ## Scope
 
-RV32I base integer instruction set, 40 instructions (with EBREAK/ECALL-as-halted and FENCE-as-NOP). No CSR support, no privileged architecture, no interrupt handling. Pipelined with forwarding and flushing. Misaligned loads/stores are not supported (no trap; results are undefined).
+RV32I base integer instruction set, 40 instructions (with EBREAK/ECALL-as-halted and FENCE-as-NOP). No CSR support, no privileged architecture, no interrupt handling. Pipelined with forwarding and flushing. Misaligned loads/stores are not supported (no trap).
 
-The loads and stores are not trapped when working with addresses that are not naturally aligned instructions. For example, an offset of 1 for lw will give the word from an offset of 0 instead of taking 3 bytes from the current word and 1 byte from the next word. This means that the lower address bits are ignored and rounded down to the nearest aligned address
+The loads and stores are not trapped when working with addresses that are not naturally aligned. For example, an offset of 1 for lw will give the word from an offset of 0 instead of taking 3 bytes from the current word and 1 byte from the next word. This means that the lower address bits are ignored and rounded down to the nearest aligned address
 
 ## Future Project Extension
 
 Hardware validation covers `test_io_loop` (switches → LEDs) and `test_compute`, where shifts, a signed compare, and a signed branch determine the LED output; all 16 switch settings were checked against a hand-derived chart.
 
 Still open:
-
-- Compliance testing with riscv-arch-test
+- RTL-to-GDSII flow (Cadence/Synopsys) on the frozen RTL
 - `imem` conversion to block RAM, deferred while resource usage stays low
 
