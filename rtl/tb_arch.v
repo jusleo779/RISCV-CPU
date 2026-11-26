@@ -1,10 +1,14 @@
 `default_nettype none
-module tb_arch(); 
+`ifndef HEX
+  `define HEX "I-add-00.hex"
+`endif
+
+module tb_arch();
             reg clk = 0;
             reg reset = 1;
             wire halted;
 
-        cpu_top #(.test_file("I-add-00.hex"), .addr_bits(18), .hex_dir("../arch-test/hex/")) dut(.clk(clk), .reset(reset), .halted(halted));
+        cpu_top #(.test_file(`HEX), .addr_bits(18), .hex_dir("../arch-test/hex/")) dut(.clk(clk), .reset(reset), .halted(halted));
 
         always #5 clk = ~clk;
 
