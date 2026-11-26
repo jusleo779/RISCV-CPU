@@ -24,3 +24,4 @@ rtl/*.vvp
 *.vcd
 arch-test/work/
 arch-test/hex/
+*:Zone.Identifier
